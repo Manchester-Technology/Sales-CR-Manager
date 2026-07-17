@@ -447,6 +447,9 @@
           <button class="btn btn-secondary" onclick="resetFunnelFilters()">Reset</button>
           <button class="btn btn-secondary hidden" id="funnelExportCsvBtn" onclick="exportFunnelCSV()">Export CSV</button>
           <button class="btn btn-primary hidden" id="funnelExportExcelBtn" onclick="exportFunnelExcel()">Export Excel</button>
+          <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
+            <input type="file" id="funnelImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importFunnelFile(this.files[0])">
+          </label>
           <button class="btn btn-secondary hidden" id="manageModelsBtn" onclick="openModelsModal()">⚙ Manage Models</button>
           <button class="btn btn-primary" onclick="openFunnelModal()">+ Add Funnel Entry</button>
         </div>
@@ -1861,6 +1864,63 @@ function exportFunnelExcel(){
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Sales Funnel');
   XLSX.writeFile(wb, 'sales-funnel.xlsx');
+}
+
+async function importFunnelFile(file){
+  if (!file) return;
+  const fullRights = isFullRights(currentUser.role);
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    let imported = 0, skipped = 0;
+
+    rows.forEach(row => {
+      const customerName = row['Customer Name'] || row['customer_name'];
+      if (!customerName){ skipped++; return; }
+
+      // A Sales Executive's import always lands in their own funnel. A
+      // Manager/Assistant Manager's import can target any executive by
+      // matching the "Sales Executive" column to a name; unmatched or
+      // blank falls back to whoever is importing.
+      let execId = currentUser.id;
+      if (fullRights){
+        const match = executives.find(e => e.name === String(row['Sales Executive']||'').trim());
+        execId = match ? match.id : currentUser.id;
+      }
+
+      funnels.push({
+        s_no: nextFunnelSNo++,
+        sales_executive_id: execId,
+        customer_name: customerName,
+        location: row['Location'] || '',
+        contact_person: row['Contact Person'] || '',
+        mobile_number: row['Mobile Number'] || '',
+        email_id: row['Email ID'] || '',
+        customer_type: row['Customer Type'] || 'New',
+        business_head: row['Business Head'] || FUNNEL_BUSINESS_HEADS[0],
+        brand: row['Brand'] || 'Others',
+        model: row['Model'] || '',
+        qty: parseInt(row['Qty'], 10) || 1,
+        value: parseFloat(row['Value (AED)'] || row['Value']) || 0,
+        status: row['Status'] || 'Pending',
+        expected_closure_month: row['Expected Closure Month'] || '',
+        remarks: row['Remarks'] || '',
+        created_date: new Date().toISOString().slice(0,10),
+      });
+      imported++;
+    });
+
+    await saveState();
+    populateFunnelYearFilter();
+    renderFunnelTable();
+    document.getElementById('funnelImportInput').value = '';
+    alert(`Imported ${imported} funnel entr${imported===1?'y':'ies'}.${skipped ? ' Skipped '+skipped+' row(s) with no customer name.' : ''}`);
+  } catch (err) {
+    alert('Could not read that file. Please use the exported CSV or Excel format.');
+    document.getElementById('funnelImportInput').value = '';
+  }
 }
 
 // ---------- Weekly Review Meeting ----------

@@ -1,0 +1,2714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manchester Technology — Customer Relationship Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<style>
+  :root{
+    --ink:#14213D;
+    --ink-2:#1E2A4A;
+    --amber:#F2A541;
+    --amber-dark:#D98F2B;
+    --slate:#5C6B84;
+    --cloud:#F5F6F8;
+    --white:#FFFFFF;
+    --success:#2E8B57;
+    --success-bg:#E4F3EA;
+    --danger:#C1443B;
+    --danger-bg:#FBE9E7;
+    --pending:#8A8F98;
+    --pending-bg:#EDEEF0;
+    --blue:#2B6CB0;
+    --blue-bg:#E3EEFC;
+    --border:#E0E3E8;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Inter',sans-serif;background:var(--cloud);color:var(--ink);}
+  h1,h2,h3,.brand,.tab,.stat-num{font-family:'Space Grotesk',sans-serif;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .hidden{display:none !important;}
+  button{font-family:inherit;cursor:pointer;}
+  input,select,textarea{font-family:inherit;}
+
+  /* ---------- LOGIN SCREEN ---------- */
+  #loginScreen{min-height:100vh;display:flex;}
+  .login-brand{
+    flex:1.1;background:radial-gradient(circle at 1px 1px, rgba(255,255,255,0.10) 1.5px, transparent 0) 0 0/22px 22px, linear-gradient(160deg,var(--ink) 0%, var(--ink-2) 100%);
+    color:white;display:flex;flex-direction:column;justify-content:space-between;padding:48px;position:relative;overflow:hidden;
+  }
+  .logo-chip{background:#fff;border-radius:10px;display:inline-flex;align-items:center;padding:8px 14px;box-shadow:0 1px 2px rgba(0,0,0,0.08);}
+  .logo-chip.nav-chip{padding:5px 11px;border-radius:8px;}
+  .logo-img-brand{height:52px;display:block;}
+  .logo-img-nav{height:30px;display:block;}
+  .logo-img-card{height:38px;display:block;}
+  .login-brand .top-label{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);font-weight:600;}
+  .login-brand h1{font-size:38px;line-height:1.15;max-width:460px;margin:24px 0 12px;font-weight:600;}
+  .login-brand p{color:#B9C2D6;max-width:420px;font-size:15px;line-height:1.6;}
+  .route-graphic{margin-top:32px;}
+  .login-quote{margin-top:22px;padding-left:16px;border-left:2px solid var(--amber);max-width:420px;}
+  .login-quote .quote-text{color:#E7EAF2;font-size:14.5px;font-style:italic;line-height:1.55;}
+  .login-quote .quote-author{color:var(--amber);font-size:12px;font-weight:600;letter-spacing:.03em;margin-top:6px;text-transform:uppercase;}
+  .login-form-side{flex:1;display:flex;align-items:center;justify-content:center;background:var(--white);padding:32px;}
+  .login-card{width:100%;max-width:400px;}
+  .login-card .brand{font-size:13px;letter-spacing:.1em;color:var(--slate);text-transform:uppercase;margin-bottom:6px;}
+  .login-card h2{font-size:23px;margin:0 0 22px;}
+  .role-toggle{display:flex;border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:20px;}
+  .role-toggle button{flex:1;padding:11px 6px;border:none;background:var(--white);color:var(--slate);font-weight:600;font-size:12.5px;transition:.15s;border-right:1px solid var(--border);}
+  .role-toggle button:last-child{border-right:none;}
+  .role-toggle button.active{background:var(--ink);color:white;}
+  .field{margin-bottom:16px;}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--slate);margin-bottom:6px;}
+  .field select, .field input, .field textarea{
+    width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;font-size:14px;background:white;color:var(--ink);
+  }
+  .field textarea{resize:vertical;min-height:70px;}
+  .btn{border-radius:8px;padding:11px 18px;font-size:14px;font-weight:600;border:none;transition:.15s;}
+  .btn-primary{background:var(--amber);color:var(--ink);}
+  .btn-primary:hover{background:var(--amber-dark);}
+  .btn-secondary{background:white;color:var(--ink);border:1px solid var(--border);}
+  .btn-secondary:hover{background:var(--cloud);}
+  .btn-block{width:100%;}
+  .login-hint{font-size:12px;color:var(--slate);margin-top:14px;line-height:1.5;}
+
+  /* ---------- APP SHELL ---------- */
+  nav.topbar{
+    background:var(--ink);color:white;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;
+  }
+  .topbar .brand{font-size:16px;font-weight:600;letter-spacing:.02em;}
+  .topbar .brand span{color:var(--amber);}
+  .topbar .brand small{display:block;font-family:'Inter';font-weight:400;font-size:11px;color:#9FAAC4;letter-spacing:.04em;}
+  .user-chip{display:flex;align-items:center;gap:12px;}
+  .role-pill{background:rgba(242,165,65,0.15);color:var(--amber);border:1px solid rgba(242,165,65,0.4);font-size:11px;padding:4px 10px;border-radius:999px;font-weight:600;letter-spacing:.03em;white-space:nowrap;}
+  .logout-btn{background:transparent;border:1px solid rgba(255,255,255,0.25);color:white;padding:7px 14px;border-radius:7px;font-size:13px;}
+  .logout-btn:hover{background:rgba(255,255,255,0.08);}
+
+  .tabstrip{background:var(--ink-2);padding:0 28px;display:flex;gap:4px;}
+  .tab{background:transparent;border:none;color:#B9C2D6;padding:14px 16px;font-size:14px;font-weight:600;border-bottom:3px solid transparent;}
+  .tab.active{color:white;border-bottom-color:var(--amber);}
+
+  main{padding:28px;max-width:1500px;margin:0 auto;}
+  .card{background:white;border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;}
+
+  .filter-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;}
+  .filter-bar .field{margin-bottom:0;min-width:130px;}
+  .filter-actions{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap;}
+
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--slate);padding:10px 10px;border-bottom:2px solid var(--border);white-space:nowrap;}
+  tbody td{padding:10px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  tbody tr:hover{background:var(--cloud);}
+  .empty-row td{text-align:center;color:var(--slate);padding:40px;}
+  .subline{color:var(--slate);font-size:11.5px;line-height:1.5;}
+
+  .chip{display:inline-block;padding:4px 9px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em;white-space:nowrap;}
+  .chip-pending{background:var(--pending-bg);color:var(--pending);}
+  .chip-stage2{background:rgba(242,165,65,0.16);color:var(--amber-dark);}
+  .chip-accepted{background:var(--success-bg);color:var(--success);}
+  .chip-declined{background:var(--danger-bg);color:var(--danger);}
+  .chip-closed{background:var(--blue-bg);color:var(--blue);}
+
+  .row-actions{display:flex;gap:6px;flex-wrap:wrap;max-width:170px;}
+  .icon-btn{background:white;border:1px solid var(--border);padding:6px 9px;border-radius:6px;font-size:11.5px;font-weight:600;white-space:nowrap;}
+  .icon-btn:hover{background:var(--cloud);}
+  .icon-btn.approve{color:var(--success);border-color:var(--success-bg);}
+  .icon-btn.decline{color:var(--danger);border-color:var(--danger-bg);}
+  .icon-btn.grant{color:var(--blue);border-color:var(--blue-bg);}
+  .icon-btn:disabled{opacity:.5;cursor:not-allowed;}
+  .vs-select{padding:5px 6px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:white;}
+
+  .chip-hold{background:rgba(242,165,65,0.16);color:var(--amber-dark);}
+  .chip-lost{background:var(--danger-bg);color:var(--danger);}
+
+  .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:20px;}
+  .stat-card{background:white;border:1px solid var(--border);border-radius:12px;padding:18px;}
+  .stat-card .stat-label{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--slate);font-weight:600;margin-bottom:6px;}
+  .stat-card .stat-num{font-size:26px;font-weight:600;color:var(--ink);}
+  .stat-card .stat-sub{font-size:12px;color:var(--slate);margin-top:4px;}
+
+  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  @media (max-width:900px){ .dash-grid{grid-template-columns:1fr;} }
+  .bar-row{display:grid;grid-template-columns:120px 1fr 90px;align-items:center;gap:12px;padding:9px 0;border-bottom:1px solid var(--border);font-size:13px;}
+  .bar-row:last-child{border-bottom:none;}
+  .bar-track{background:var(--cloud);border-radius:999px;height:10px;overflow:hidden;}
+  .bar-fill{background:var(--amber);height:100%;border-radius:999px;}
+
+  .week-selector{display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap;}
+  .week-btn{padding:8px 16px;border:1px solid var(--border);background:white;border-radius:8px;font-weight:600;font-size:12.5px;cursor:pointer;color:var(--slate);}
+  .week-btn:hover{border-color:var(--amber);color:var(--amber-dark);}
+  .week-btn.active{background:var(--ink);color:white;border-color:var(--ink);}
+
+  .rv-grid{display:grid;min-width:640px;}
+  .rv-cell{padding:8px 6px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;}
+  .rv-cell:last-child{border-right:none;}
+  .rv-header{background:var(--cloud);font-weight:700;font-size:11px;color:var(--ink);text-align:center;padding:10px 6px;border-right:1px solid var(--border);border-bottom:2px solid var(--border);}
+  .rv-section{background:white;font-weight:700;font-size:11px;color:var(--amber-dark);text-align:center;padding:8px 6px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);letter-spacing:.03em;}
+  .rv-sub{background:white;font-weight:600;font-size:10px;color:var(--slate);text-align:center;padding:7px 4px;border-right:1px solid var(--border);border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.02em;}
+  .rv-row-label{background:var(--cloud);font-weight:700;font-size:11px;color:var(--ink);text-align:center;border-right:2px solid var(--border);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:center;}
+  .rv-input{width:100%;padding:6px 5px;border:1px solid var(--border);border-radius:6px;font-size:12px;text-align:center;background:white;}
+  .rv-input:disabled{background:var(--cloud);color:var(--slate);cursor:not-allowed;}
+
+  .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .section-head h2{font-size:18px;margin:0;}
+  .lock-note{font-size:12px;color:var(--slate);display:flex;align-items:center;gap:6px;margin-top:4px;}
+
+  form .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
+  form .field.full{grid-column:1 / -1;}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(20,33,61,0.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:50;}
+  .modal{background:white;border-radius:14px;padding:28px;width:100%;max-width:620px;max-height:90vh;overflow-y:auto;}
+  .modal h3{margin:0 0 4px;font-size:19px;}
+  .modal .sub{color:var(--slate);font-size:13px;margin-bottom:20px;display:flex;align-items:center;gap:8px;}
+  .modal-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:8px;}
+
+  .footnote{text-align:center;color:var(--slate);font-size:12px;margin-top:8px;padding-bottom:20px;}
+  input:disabled, select:disabled, textarea:disabled{background:var(--cloud);color:var(--slate);cursor:not-allowed;}
+
+  @media (max-width:900px){
+    #loginScreen{flex-direction:column;}
+    .login-brand{padding:32px;}
+    form .form-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ SUPABASE NOT CONFIGURED WARNING ============ -->
+<div id="supabaseWarning" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#B42318;color:white;font-family:'Inter',sans-serif;font-size:13.5px;padding:10px 16px;text-align:center;">
+  ⚠️ Supabase isn't configured yet, so nothing you enter will be saved. Open this file's HTML, find <code>SUPABASE_URL</code> / <code>SUPABASE_ANON_KEY</code> near the top of the script, and fill in your Supabase project's values.
+</div>
+
+<!-- ============ LOADING SCREEN ============ -->
+<div id="loadingScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#14213D;color:white;font-family:'Inter',sans-serif;font-size:14px;">
+  Loading…
+</div>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="loginScreen" class="hidden">
+  <div class="login-brand">
+    <div>
+      <div class="logo-chip" style="margin-bottom:28px;"><img class="logo-img-brand" src="data:image/png;base64,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" alt="Manchester Technology logo"></div>
+      <div class="top-label">Customer Relationship Manager</div>
+      <h1>Every customer relationship, tracked from first visit to closed deal.</h1>
+      <p>Manage visits, approvals, and your sales funnel across the Emirates — submitted by your team, cleared through Assistant Manager and Manager approval, all in one shared system.</p>
+      <div class="login-quote" id="loginQuote"></div>
+    </div>
+    <svg class="route-graphic" width="320" height="90" viewBox="0 0 320 90" fill="none">
+      <path d="M10 70 C 70 20, 110 80, 160 40 S 260 10, 310 45" stroke="#F2A541" stroke-width="2" stroke-dasharray="6 6" opacity="0.8"/>
+      <circle cx="10" cy="70" r="5" fill="#F2A541"/>
+      <circle cx="160" cy="40" r="5" fill="#F2A541"/>
+      <circle cx="310" cy="45" r="5" fill="#F2A541"/>
+      <text x="0" y="88" fill="#9FAAC4" font-size="10" font-family="IBM Plex Mono">DXB</text>
+      <text x="148" y="30" fill="#9FAAC4" font-size="10" font-family="IBM Plex Mono">SHJ</text>
+      <text x="292" y="35" fill="#9FAAC4" font-size="10" font-family="IBM Plex Mono">AUH</text>
+    </svg>
+  </div>
+
+  <div class="login-form-side">
+    <div class="login-card">
+      <img class="logo-img-card" style="margin-bottom:12px;" src="data:image/png;base64,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" alt="Manchester Technology logo">
+      <h2>Sign in to Customer Relationship Manager</h2>
+
+      <div class="role-toggle">
+        <button id="roleTabManager" class="active" onclick="setLoginRole('manager')">Manager</button>
+        <button id="roleTabAM" onclick="setLoginRole('assistant_manager')">Assistant Manager</button>
+        <button id="roleTabExec" onclick="setLoginRole('sales_executive')">Sales Executive</button>
+      </div>
+
+      <div id="managerLoginFields">
+        <div id="managerSetupFields">
+          <p class="subline" style="margin:-4px 0 12px;">First time signing in — set up this account.</p>
+          <div class="field"><label>Your Name</label><input type="text" id="managerNewName" placeholder="Full name"></div>
+          <div class="field"><label>Create Password</label><input type="password" id="managerNewPassword" placeholder="At least 6 characters"></div>
+          <div class="field"><label>Confirm Password</label><input type="password" id="managerConfirmPassword" placeholder="Re-enter password"></div>
+          <p id="managerSetupError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-8px 0 14px;">Enter your name and matching passwords (at least 6 characters).</p>
+          <button class="btn btn-primary btn-block" onclick="setManagerAccount(this)">Set Up &amp; Sign In</button>
+        </div>
+        <div id="managerLoginOnlyFields" class="hidden">
+          <div class="field">
+            <label>Manager Account</label>
+            <input type="text" id="managerNameDisplay" disabled>
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="managerPassword" placeholder="Enter password">
+          </div>
+          <p id="managerLoginError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-8px 0 14px;">Incorrect password.</p>
+          <button class="btn btn-primary btn-block" onclick="loginAsManager(this)">Sign In as Manager</button>
+        </div>
+      </div>
+
+      <div id="amLoginFields" class="hidden">
+        <div id="amSetupFields">
+          <p class="subline" style="margin:-4px 0 12px;">First time signing in — set up this account.</p>
+          <div class="field"><label>Your Name</label><input type="text" id="amNewName" placeholder="Full name"></div>
+          <div class="field"><label>Create Password</label><input type="password" id="amNewPassword" placeholder="At least 6 characters"></div>
+          <div class="field"><label>Confirm Password</label><input type="password" id="amConfirmPassword" placeholder="Re-enter password"></div>
+          <p id="amSetupError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-8px 0 14px;">Enter your name and matching passwords (at least 6 characters).</p>
+          <button class="btn btn-primary btn-block" onclick="setAssistantManagerAccount(this)">Set Up &amp; Sign In</button>
+        </div>
+        <div id="amLoginOnlyFields" class="hidden">
+          <div class="field">
+            <label>Assistant Manager Account</label>
+            <input type="text" id="amNameDisplay" disabled>
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="amPassword" placeholder="Enter password">
+          </div>
+          <p id="amLoginError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-8px 0 14px;">Incorrect password.</p>
+          <button class="btn btn-primary btn-block" onclick="loginAsAssistantManager(this)">Sign In as Assistant Manager</button>
+        </div>
+      </div>
+
+      <div id="execLoginFields" class="hidden">
+        <p id="execLoginEmptyState" class="subline hidden">No Sales Executive accounts yet — ask your Manager or Assistant Manager to add one from the Sales Executives tab.</p>
+        <div id="execLoginFormFields">
+          <div class="field">
+            <label>Select your name</label>
+            <select id="execLoginSelect"></select>
+          </div>
+          <div class="field">
+            <label>Password</label>
+            <input type="password" id="execLoginPassword" placeholder="Enter your password">
+          </div>
+          <p id="execLoginError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-8px 0 14px;">Incorrect password. Please try again.</p>
+          <button class="btn btn-primary btn-block" onclick="loginAsExecutive(this)">Sign In as Sales Executive</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SHELL ============ -->
+<div id="appScreen" class="hidden">
+  <nav class="topbar">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div class="logo-chip nav-chip"><img class="logo-img-nav" src="data:image/png;base64,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" alt="Manchester Technology logo"></div>
+      <div class="brand" style="font-size:13px;color:#B9C2D6;">Customer Relationship Manager</div>
+    </div>
+    <div class="user-chip">
+      <span id="userName" class="mono" style="font-size:13px;"></span>
+      <span id="userRolePill" class="role-pill"></span>
+      <button class="logout-btn" onclick="logout()">Log out</button>
+    </div>
+  </nav>
+
+  <div class="tabstrip">
+    <button class="tab hidden" id="tabFunnel" onclick="switchTab('funnel')">Sales Funnel</button>
+    <button class="tab hidden" id="tabReview" onclick="switchTab('review')">Weekly Review</button>
+    <button class="tab hidden" id="tabDcr" onclick="switchTab('dcr')">DCR</button>
+    <button class="tab active" id="tabRequests" onclick="switchTab('requests')">Visit Requests</button>
+    <button class="tab hidden" id="tabDashboard" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab hidden" id="tabExecs" onclick="switchTab('execs')">Sales Executives</button>
+  </div>
+
+  <main>
+    <!-- ===== Requests tab ===== -->
+    <section id="panelRequests">
+      <div class="card filter-bar">
+        <div class="field">
+          <label>Year</label>
+          <select id="fltYear" onchange="renderTable()"></select>
+        </div>
+        <div class="field">
+          <label>Month</label>
+          <select id="fltMonth" onchange="renderTable()">
+            <option value="all">All months</option>
+            <option value="1">January</option><option value="2">February</option><option value="3">March</option>
+            <option value="4">April</option><option value="5">May</option><option value="6">June</option>
+            <option value="7">July</option><option value="8">August</option><option value="9">September</option>
+            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Emirate</label>
+          <select id="fltEmirate" onchange="renderTable()">
+            <option value="all">All emirates</option>
+            <option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option>
+            <option>Ajman</option><option>Umm al Quwain</option><option>Fujairah</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Approval Status</label>
+          <select id="fltStatus" onchange="renderTable()">
+            <option value="all">All statuses</option>
+            <option>Pending Manager Approval</option>
+            <option>Accepted</option><option>Declined</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Visit Status</label>
+          <select id="fltVisit" onchange="renderTable()">
+            <option value="all">All</option><option>Pending</option><option>Closed</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:160px;">
+          <label>Search</label>
+          <input type="text" id="fltSearch" placeholder="Customer, contact, location..." oninput="renderTable()">
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
+          <button class="btn btn-secondary" onclick="exportCSV()">Export CSV</button>
+          <button class="btn btn-primary" onclick="exportExcel()">Export Excel</button>
+          <button class="btn btn-primary hidden" id="newRequestBtn" onclick="openNewRequestModal()">+ New Visit Request</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>S.No</th><th>Requested</th><th>Customer Name</th><th>Contact Name</th><th>Location</th>
+              <th>Type / Lead</th><th>Appointment</th><th>Meeting Type</th><th>Approval</th>
+              <th>Visit Status</th><th>Remarks</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="requestsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== Sales Executives tab (Assistant Manager / Manager) ===== -->
+    <section id="panelExecs" class="hidden">
+      <div class="card">
+        <div class="section-head">
+          <h2>Sales Executives</h2>
+          <button class="btn btn-primary" onclick="openExecModal()">+ Add Executive</button>
+        </div>
+        <table>
+          <thead><tr><th>Name</th><th>Open Requests</th><th>Total Requests</th><th>Actions</th></tr></thead>
+          <tbody id="execsBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== Sales Funnel tab (Sales Executive: own pipeline; Manager/Assistant Manager: full access) ===== -->
+    <section id="panelFunnel" class="hidden">
+      <div class="card filter-bar">
+        <div class="field hidden" id="funnelExecFilterField">
+          <label>Sales Executive</label>
+          <select id="fltFunnelExec" onchange="renderFunnelTable()"></select>
+        </div>
+        <div class="field">
+          <label>Closure Year</label>
+          <select id="fltFunnelYear" onchange="renderFunnelTable()"></select>
+        </div>
+        <div class="field">
+          <label>Closure Month</label>
+          <select id="fltFunnelMonth" onchange="renderFunnelTable()">
+            <option value="all">All months</option>
+            <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+            <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+            <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Customer Type</label>
+          <select id="fltFunnelType" onchange="renderFunnelTable()">
+            <option value="all">All</option><option>New</option><option>Existing</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Business Head</label>
+          <select id="fltFunnelBusinessHead" onchange="renderFunnelTable()">
+            <option value="all">All</option>
+            <option>ORS</option><option>Lease</option><option>Consumables</option><option>FSMA</option>
+            <option>AMC</option><option>Spot</option><option>Mis.Spares</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Brand</label>
+          <select id="fltFunnelBrand" onchange="renderFunnelTable()">
+            <option value="all">All</option>
+            <option>Epson</option><option>Kyocera</option><option>Canon</option><option>Toshiba</option>
+            <option>Ricoh</option><option>HP</option><option>Others</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="fltFunnelStatus" onchange="renderFunnelTable()">
+            <option value="all">All statuses</option>
+            <option>Won</option><option>Pending</option><option>Hold</option><option>Closed</option><option>Cancelled</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:160px;">
+          <label>Search</label>
+          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="renderFunnelTable()">
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-secondary" onclick="resetFunnelFilters()">Reset</button>
+          <button class="btn btn-secondary hidden" id="funnelExportCsvBtn" onclick="exportFunnelCSV()">Export CSV</button>
+          <button class="btn btn-primary hidden" id="funnelExportExcelBtn" onclick="exportFunnelExcel()">Export Excel</button>
+          <button class="btn btn-secondary hidden" id="manageModelsBtn" onclick="openModelsModal()">⚙ Manage Models</button>
+          <button class="btn btn-primary" onclick="openFunnelModal()">+ Add Funnel Entry</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>S.No</th><th>Customer Name</th><th>Location</th><th>Contact Person</th>
+              <th>Business Head</th><th>Brand</th><th>Model / Qty</th><th>Value</th><th>Status</th>
+              <th>Expected Closure</th><th>Remarks</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="funnelBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== Weekly Review Meeting tab (Sales Executive: own; Manager/Assistant Manager: full access) ===== -->
+    <section id="panelReview" class="hidden">
+      <div class="card filter-bar">
+        <div class="field hidden" id="reviewExecFilterField">
+          <label>Sales Executive</label>
+          <select id="reviewExecSelect" onchange="onReviewExecChange()"></select>
+        </div>
+        <div class="field">
+          <label>Month</label>
+          <select id="reviewMonthSelect" onchange="onReviewPeriodChange()">
+            <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+            <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+            <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Year</label>
+          <select id="reviewYearSelect" onchange="onReviewPeriodChange()"></select>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-secondary" onclick="exportReviewCSV()">Export CSV</button>
+          <button class="btn btn-secondary" onclick="exportReviewExcel()">Export Excel</button>
+          <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
+            <input type="file" id="reviewImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importReviewFile(this.files[0])">
+          </label>
+        </div>
+      </div>
+      <p class="subline" id="reviewTargetsNote" style="margin:-10px 0 16px 2px;">Target row can be set by you or by Manager / Assistant Manager; Commitment and Achievement are filled in weekly.</p>
+
+      <div class="stat-grid" id="reviewStatGrid"></div>
+      <div class="stat-grid" id="reviewYtdStatGrid"></div>
+
+      <div class="card">
+        <div class="section-head"><h2>Weekly Review Meeting</h2></div>
+        <div class="week-selector" id="reviewWeekSelector"></div>
+      </div>
+
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <div id="reviewTableWrap"></div>
+      </div>
+    </section>
+
+    <!-- ===== Daily Activity / DCR tab (Sales Executive: own; Manager/Assistant Manager: full access) ===== -->
+    <section id="panelDcr" class="hidden">
+      <div class="card hidden" id="dcrMiniDashboard">
+        <div class="section-head"><h2>Last 7 Days Activity</h2></div>
+        <div class="stat-grid" id="dcrDashStatGrid"></div>
+        <div id="dcrDashByExec"></div>
+      </div>
+      <div class="card filter-bar">
+        <div class="field hidden" id="dcrExecFilterField">
+          <label>Sales Executive</label>
+          <select id="fltDcrExec" onchange="renderDcrTable()"></select>
+        </div>
+        <div class="field">
+          <label>Call Type</label>
+          <select id="fltDcrCallType" onchange="renderDcrTable()">
+            <option value="all">All</option>
+            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Mode</label>
+          <select id="fltDcrApproachedBy" onchange="renderDcrTable()">
+            <option value="all">All</option><option>Call</option><option>Email</option><option>Direct visit</option>
+          </select>
+        </div>
+        <div class="field" style="flex:1;min-width:160px;">
+          <label>Search</label>
+          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="renderDcrTable()">
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-secondary" onclick="resetDcrFilters()">Reset</button>
+          <button class="btn btn-secondary" onclick="exportDcrCSV()">Export CSV</button>
+          <button class="btn btn-secondary" onclick="exportDcrExcel()">Export Excel</button>
+          <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
+            <input type="file" id="dcrImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importDcrFile(this.files[0])">
+          </label>
+          <button class="btn btn-primary" onclick="openDcrModal()">+ Add Activity</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th><th>Call Type</th><th>Customer Name</th><th>Contact Name / Designation</th><th>Contact</th>
+              <th>Location</th><th>Mode</th><th>Remarks / Requirement</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="dcrBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== Dashboard tab (Manager / Assistant Manager only) ===== -->
+    <section id="panelDashboard" class="hidden">
+      <div class="stat-grid" id="dashStatGrid"></div>
+      <div class="dash-grid">
+        <div class="card">
+          <div class="section-head"><h2>Funnel by Sales Executive</h2></div>
+          <div id="dashByExec"></div>
+        </div>
+        <div class="card">
+          <div class="section-head"><h2>Funnel by Business Head</h2></div>
+          <div id="dashByBusinessHead"></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-head"><h2>Expected Closures — This Month &amp; Next</h2></div>
+        <table>
+          <thead><tr><th>Customer</th><th>Sales Executive</th><th>Business Head</th><th>Value</th><th>Expected Closure</th><th>Status</th></tr></thead>
+          <tbody id="dashUpcomingBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="footnote">Prototype data lives in memory for this session only — everything resets on reload.</p>
+  </main>
+</div>
+
+<!-- ============ Edit Request Modal ============ -->
+<div id="editModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Edit Visit Request</h3>
+    <p class="sub"><span class="mono" id="editModalSub"></span><span id="editModalChip"></span></p>
+    <form id="editRequestForm" onsubmit="submitEditRequest(event)">
+      <input type="hidden" id="editId">
+      <div class="form-grid">
+        <div class="field"><label>Customer Name</label><input id="edCustomer" type="text"></div>
+        <div class="field"><label>Customer Type</label>
+          <select id="edType"><option>New</option><option>Existing</option></select>
+        </div>
+        <div class="field"><label>Contact Name</label><input id="edContact" type="text"></div>
+        <div class="field"><label>Mobile Number</label><input id="edMobile" type="tel"></div>
+        <div class="field"><label>Email Address</label><input id="edEmail" type="email"></div>
+        <div class="field"><label>Lead Type</label>
+          <select id="edLead"><option>ORS</option><option>Contract</option><option>Consumables</option><option>Lease</option></select>
+        </div>
+        <div class="field"><label>Emirate</label>
+          <select id="edEmirate">
+            <option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option>
+            <option>Ajman</option><option>Umm al Quwain</option><option>Fujairah</option>
+          </select>
+        </div>
+        <div class="field"><label>Location</label><input id="edLocation" type="text"></div>
+        <div class="field">
+          <label>Appointment Date</label>
+          <input id="edAppointment" type="date">
+        </div>
+        <div class="field">
+          <label>Appointment Time</label>
+          <input id="edApptTime" type="time">
+        </div>
+        <div class="field"><label>Meeting Type</label>
+          <select id="edMeeting">
+            <option>Cold Call</option><option>Follow Up</option><option>Payment Collection</option>
+            <option>Documentation</option><option>Account Management</option>
+          </select>
+        </div>
+        <div class="field full">
+          <div class="lock-note hidden" id="lockNote">🔒 Locked — this request is fully accepted, so only Assistant Manager / Manager can amend it, or the sales executive can request one-time edit access.</div>
+        </div>
+        <div class="field full"><label>Remarks</label><textarea required id="edRemarks"></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('editModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Executive Add/Edit Modal ============ -->
+<div id="execModal" class="modal-overlay hidden">
+  <div class="modal" style="max-width:420px;">
+    <h3 id="execModalTitle">Add Sales Executive</h3>
+    <form id="execForm" onsubmit="submitExecForm(event)" novalidate>
+      <input type="hidden" id="execId">
+      <div class="field"><label>Full Name</label><input id="execName" type="text"></div>
+      <div class="field">
+        <label id="execPasswordLabel">Password</label>
+        <input id="execPassword" type="password" placeholder="Set a login password">
+        <p id="execPasswordHint" class="hidden" style="color:var(--slate);font-size:12px;margin:6px 0 0;">Leave blank to keep the current password.</p>
+      </div>
+      <p id="execFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Fill in name, email, and a password.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('execModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Funnel Entry Add/Edit Modal ============ -->
+<div id="funnelModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 id="funnelModalTitle">Add Funnel Entry</h3>
+    <p class="sub" id="funnelModalSub"></p>
+    <form id="funnelForm" onsubmit="submitFunnelForm(event)">
+      <input type="hidden" id="fnId">
+      <div class="form-grid">
+        <div class="field hidden" id="fnExecField">
+          <label>Sales Executive</label>
+          <select id="fnExec"></select>
+        </div>
+        <div class="field"><label>Customer Name</label><input required id="fnCustomer" type="text"></div>
+        <div class="field"><label>Location</label><input required id="fnLocation" type="text"></div>
+        <div class="field"><label>Contact Person</label><input required id="fnContact" type="text"></div>
+        <div class="field"><label>Mobile Number</label><input required id="fnMobile" type="tel" placeholder="+971 5X XXX XXXX"></div>
+        <div class="field"><label>Email ID</label><input required id="fnEmail" type="email"></div>
+        <div class="field"><label>Customer Type</label>
+          <select id="fnType"><option>New</option><option>Existing</option></select>
+        </div>
+        <div class="field"><label>Business Head</label>
+          <select id="fnBusinessHead">
+            <option>ORS</option><option>Lease</option><option>Consumables</option><option>FSMA</option>
+            <option>AMC</option><option>Spot</option><option>Mis.Spares</option>
+          </select>
+        </div>
+        <div class="field"><label>Brand</label>
+          <select id="fnBrand">
+            <option>Epson</option><option>Kyocera</option><option>Canon</option><option>Toshiba</option>
+            <option>Ricoh</option><option>HP</option><option>Others</option>
+          </select>
+        </div>
+        <div class="field"><label>Model</label>
+          <select id="fnModel"></select>
+        </div>
+        <div class="field"><label>Qty</label><input required id="fnQty" type="number" min="1" step="1" value="1"></div>
+        <div class="field"><label>Value (AED)</label><input required id="fnValue" type="number" min="0" step="0.01"></div>
+        <div class="field"><label>Status</label>
+          <select id="fnStatus"><option>Won</option><option>Pending</option><option>Hold</option><option>Closed</option><option>Cancelled</option></select>
+        </div>
+        <div class="field"><label>Expected Closure Month</label><input required id="fnClosureMonth" type="month"></div>
+        <div class="field full"><label>Remarks</label><textarea id="fnRemarks" placeholder="Any notes"></textarea></div>
+      </div>
+      <p id="funnelFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Please fill in all required fields.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('funnelModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Manage Machine Models Modal (Manager / Assistant Manager) ============ -->
+<div id="modelsModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Manage Machine Models</h3>
+    <p class="sub">These models populate the Model dropdown on the Sales Funnel form for every Sales Executive.</p>
+    <form onsubmit="addMachineModel(event)">
+      <div class="form-grid">
+        <div class="field full"><label>New Model Name</label><input id="newModelName" type="text" placeholder="e.g. Kyocera TASKalfa 2554ci"></div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-start;margin-bottom:16px;">
+        <button type="submit" class="btn btn-primary">+ Add Model</button>
+      </div>
+    </form>
+    <div id="modelsListWrap" style="max-height:280px;overflow-y:auto;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('modelsModal')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ New Visit Request Modal (Sales Executive) ============ -->
+<div id="newRequestModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Submit a Visit Request</h3>
+    <p class="sub">Goes to the Assistant Manager first, then the Manager for final approval.</p>
+    <form id="newRequestForm" onsubmit="submitNewRequest(event)">
+      <div class="form-grid">
+        <div class="field"><label>Customer Name</label><input required id="nrCustomer" type="text"></div>
+        <div class="field"><label>Customer Type</label>
+          <select id="nrType"><option>New</option><option>Existing</option></select>
+        </div>
+        <div class="field"><label>Contact Name</label><input required id="nrContact" type="text"></div>
+        <div class="field"><label>Mobile Number</label><input required id="nrMobile" type="tel" placeholder="+971 5X XXX XXXX"></div>
+        <div class="field"><label>Email Address</label><input required id="nrEmail" type="email"></div>
+        <div class="field"><label>Lead Type</label>
+          <select id="nrLead"><option>ORS</option><option>Contract</option><option>Consumables</option><option>Lease</option></select>
+        </div>
+        <div class="field"><label>Emirate</label>
+          <select id="nrEmirate" required>
+            <option value="">Select emirate</option>
+            <option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option>
+            <option>Ajman</option><option>Umm al Quwain</option><option>Fujairah</option>
+          </select>
+        </div>
+        <div class="field"><label>Location</label><input required id="nrLocation" type="text" placeholder="Area / building"></div>
+        <div class="field"><label>Appointment Date</label><input required id="nrAppointment" type="date"></div>
+        <div class="field"><label>Appointment Time</label><input required id="nrApptTime" type="time"></div>
+        <div class="field"><label>Meeting Type</label>
+          <select id="nrMeeting">
+            <option>Cold Call</option><option>Follow Up</option><option>Payment Collection</option>
+            <option>Documentation</option><option>Account Management</option>
+          </select>
+        </div>
+        <div class="field full"><label>Remarks</label><textarea required id="nrRemarks" placeholder="Any notes for your approvers"></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('newRequestModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Submit for Approval</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Daily Activity (DCR) Add/Edit Modal ============ -->
+<div id="dcrModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 id="dcrModalTitle">Add Daily Activity</h3>
+    <p class="sub" id="dcrModalSub"></p>
+    <form id="dcrForm" onsubmit="submitDcrForm(event)">
+      <input type="hidden" id="dcrId">
+      <div class="form-grid">
+        <div class="field hidden" id="dcrExecField">
+          <label>Sales Executive</label>
+          <select id="dcrExec"></select>
+        </div>
+        <div class="field"><label>Date</label><input required id="dcrDate" type="date"></div>
+        <div class="field"><label>Call Type</label>
+          <select id="dcrCallType">
+            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
+          </select>
+        </div>
+        <div class="field"><label>Customer Name</label><input required id="dcrCustomer" type="text"></div>
+        <div class="field"><label>Contact Name</label><input id="dcrContactName" type="text"></div>
+        <div class="field"><label>Designation</label><input id="dcrDesignation" type="text" placeholder="e.g. Procurement Manager"></div>
+        <div class="field"><label>Contact Number</label><input required id="dcrContactNumber" type="tel" placeholder="+971 5X XXX XXXX"></div>
+        <div class="field"><label>Contact Email</label><input id="dcrContactEmail" type="email"></div>
+        <div class="field"><label>Location</label><input required id="dcrLocation" type="text"></div>
+        <div class="field"><label>Mode</label>
+          <select id="dcrApproachedBy"><option>Call</option><option>Email</option><option>Direct visit</option></select>
+        </div>
+        <div class="field full"><label>Remarks / Requirement</label><textarea id="dcrRemarks" placeholder="Notes or requirement gathered from this call"></textarea></div>
+      </div>
+      <p id="dcrFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Please fill in all required fields.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('dcrModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+/* ==========================================================================
+   MANCHESTER TECHNOLOGY — FIELD VISIT MANAGER
+
+   Frontend prototype. Data (including Manager/Assistant Manager passwords
+   and Sales Executive accounts) is held in memory only — everything resets
+   on reload. Swap the functions below for real backend calls (Supabase
+   Auth, Firebase Auth, etc.) for production use.
+
+   FIRST-TIME ACCOUNT SETUP: Manager and Assistant Manager don't ship with a
+   name or password. The first time either signs in, they're prompted to
+   set both on the spot (see setManagerAccount / setAssistantManagerAccount);
+   after that it behaves like a normal password login for the rest of the
+   session.
+
+   No sample data ships either: visit requests start empty, and Sales
+   Executives start with an empty roster — Manager/Assistant Manager add
+   each executive fresh from the Sales Executives tab.
+
+   APPROVAL WORKFLOW (single stage):
+     A Sales Executive submits a request directly to "Pending Manager
+     Approval" — Manager and Assistant Manager both hold full rights and
+     can Accept or Decline it. Accepting sets "Accepted"; declining sets
+     "Declined". The appointment date (and other core fields) lock for the
+     sales executive only once a request reaches "Accepted". Assistant
+     Manager and Manager can always edit, since both hold full rights.
+
+   EDIT-ACCESS REQUESTS: once locked, a sales executive can request a
+   one-time re-open (edit_requested). An Assistant Manager or Manager can
+   grant it (edit_allowed), which unlocks the request for a single edit;
+   saving that edit re-locks it automatically.
+
+   VISIT STATUS: separate from approval — the owning sales executive marks
+   a request Pending/Closed after the meeting happens (only available once
+   the request is fully Accepted).
+
+   NOTE ON ASSUMPTIONS: "Lead Type" values (ORS/Contract/Consumables/Lease)
+   match what was requested.
+
+   SHARED STORAGE: all business data (Manager/Assistant Manager accounts,
+   Sales Executives, and visit requests) is persisted to Supabase as one
+   shared JSON record, so Manager, Assistant Manager, and every Sales
+   Executive see the same live data across tabs, devices, and sessions —
+   not just in one browser tab's memory. This data is visible to anyone
+   using this app who has the Supabase anon key below (paired with the RLS
+   policy from schema.sql, which currently allows any anon-key caller full
+   access — see schema.sql for how to tighten that later).
+   ========================================================================== */
+
+// ---------- Supabase connection ----------
+// Fill these in from your Supabase project (Project Settings -> API):
+//   SUPABASE_URL       -> "Project URL"
+//   SUPABASE_ANON_KEY   -> "anon" "public" key (safe to expose client-side)
+// Then run the matching table-creation SQL (the `app_state` table, see the
+// bottom of schema.sql / the note in chat) in the Supabase SQL editor.
+const SUPABASE_URL = 'https://vxekwlvxhwhhkrithdum.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_WeXs5IyuRn5k-q5mK8iHBA_vkGUrp0l';
+const supabaseClient = (SUPABASE_URL.startsWith('http'))
+  ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  : null;
+const STATE_ROW_ID = 'app-state';
+
+// ---------- Login screen sales quote ----------
+const SALES_QUOTES = [
+  { text: "People don't buy what you do; they buy why you do it.", author: "Simon Sinek" },
+  { text: "Your most unhappy customers are your greatest source of learning.", author: "Bill Gates" },
+  { text: "Make a customer, not a sale.", author: "Katherine Barchetti" },
+  { text: "The customer's perception is your reality.", author: "Kate Zabriskie" },
+  { text: "A satisfied customer is the best business strategy of all.", author: "Michael LeBoeuf" },
+  { text: "It's not about having the right opportunities. It's about handling the opportunities right.", author: "Mark Hunter" },
+  { text: "Success is the sum of small efforts, repeated day in and day out.", author: "Robert Collier" },
+  { text: "Sales are contingent upon the attitude of the salesman, not the attitude of the prospect.", author: "William Clement Stone" },
+];
+function showSalesQuote(){
+  const el = document.getElementById('loginQuote');
+  if (!el) return;
+  const q = SALES_QUOTES[Math.floor(Math.random() * SALES_QUOTES.length)];
+  el.innerHTML = `<div class="quote-text">&ldquo;${q.text}&rdquo;</div><div class="quote-author">— ${q.author}</div>`;
+}
+
+// ---------- Shared "database" ----------
+// Manager and Assistant Manager start with no name or password — each sets
+// both the first time they sign in (see setManagerAccount / setAssistantManagerAccount).
+let manager = { id:'mgr-1', name:null, email:null, role:'manager', password:null };
+let assistantManager = { id:'am-1', name:null, email:null, role:'assistant_manager', password:null };
+
+// No sales executives are seeded — Manager/Assistant Manager add each one
+// fresh from the Sales Executives tab.
+let executives = [];
+
+let requests = [];
+
+let nextSNo = 1;
+
+// Sales Funnel — each sales executive's pipeline of opportunities. Manager
+// and Assistant Manager have full access across every executive's funnel;
+// a Sales Executive only sees and manages their own entries.
+let funnels = [];
+let nextFunnelSNo = 1;
+const FUNNEL_BUSINESS_HEADS = ['ORS','Lease','Consumables','FSMA','AMC','Spot','Mis.Spares'];
+
+// Machine Models — a manager-maintained list of models that populates the
+// Model dropdown on the Sales Funnel form for every Sales Executive.
+let machineModels = [];
+
+// Weekly Review Meeting — a monthly billing/machine-sales/collection target
+// vs. commitment vs. achievement grid per Sales Executive, broken down by
+// week. Manager and Assistant Manager have full access across every
+// executive; a Sales Executive only sees and fills in their own.
+const REVIEW_WEEKS = ['Week 1','Week 2','Week 3','Week 4','Week 5'];
+let weeklyReviews = {}; // weeklyReviews[execId].months["YYYY-MM"] = { targets:{...}, weeks:{...} }
+let reviewSelectedWeek = 'Week 1';
+
+// Daily Activity (DCR) — a daily call/visit log. Manager and Assistant
+// Manager have full access across every executive; a Sales Executive only
+// sees and manages their own entries.
+let dcrEntries = [];
+let nextDcrSNo = 1;
+
+// ---------- Session state ----------
+let currentUser = null; // { id, name, email, role }
+let filters = { year:'all', month:'all', emirate:'all', status:'all', visit:'all', search:'' };
+
+// ---------- Shared storage load/save ----------
+async function loadState(){
+  if (!supabaseClient){
+    console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
+    return;
+  }
+  try {
+    const { data, error } = await supabaseClient
+      .from('app_state')
+      .select('value')
+      .eq('id', STATE_ROW_ID)
+      .maybeSingle();
+    if (error) throw error;
+    if (data && data.value){
+      const stateData = data.value;
+      manager = stateData.manager || manager;
+      assistantManager = stateData.assistantManager || assistantManager;
+      executives = stateData.executives || [];
+      requests = stateData.requests || [];
+      nextSNo = stateData.nextSNo || 1;
+      funnels = stateData.funnels || [];
+      nextFunnelSNo = stateData.nextFunnelSNo || 1;
+      weeklyReviews = stateData.weeklyReviews || {};
+      dcrEntries = stateData.dcrEntries || [];
+      nextDcrSNo = stateData.nextDcrSNo || 1;
+      machineModels = stateData.machineModels || [];
+    }
+    // No row yet (data is null) -> first run, keep the defaults above.
+  } catch (err) {
+    console.error('Failed to load state from Supabase:', err);
+  }
+}
+
+async function saveState(){
+  if (!supabaseClient){
+    console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
+    return;
+  }
+  try {
+    const payload = { manager, assistantManager, executives, requests, nextSNo, funnels, nextFunnelSNo, weeklyReviews, dcrEntries, nextDcrSNo, machineModels };
+    const { error } = await supabaseClient
+      .from('app_state')
+      .upsert({ id: STATE_ROW_ID, value: payload, updated_at: new Date().toISOString() });
+    if (error) throw error;
+  } catch (err) {
+    console.error('Failed to save state to Supabase:', err);
+  }
+}
+
+function isFullRights(role){ return role === 'manager' || role === 'assistant_manager'; }
+function roleLabel(role){ return role === 'manager' ? 'Manager' : role === 'assistant_manager' ? 'Assistant Manager' : 'Sales Executive'; }
+
+// ---------- Login ----------
+function populateExecLoginSelect(){
+  const sel = document.getElementById('execLoginSelect');
+  sel.innerHTML = executives.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  document.getElementById('execLoginEmptyState').classList.toggle('hidden', executives.length > 0);
+  document.getElementById('execLoginFormFields').classList.toggle('hidden', executives.length === 0);
+}
+
+// Shows the "create a password" fields the first time a Manager/Assistant
+// Manager signs in, and the normal password field every time after.
+function refreshManagerFieldsView(){
+  const needsSetup = manager.password === null;
+  document.getElementById('managerSetupFields').classList.toggle('hidden', !needsSetup);
+  document.getElementById('managerLoginOnlyFields').classList.toggle('hidden', needsSetup);
+  if (!needsSetup) document.getElementById('managerNameDisplay').value = manager.name + ' — Manager';
+}
+function refreshAmFieldsView(){
+  const needsSetup = assistantManager.password === null;
+  document.getElementById('amSetupFields').classList.toggle('hidden', !needsSetup);
+  document.getElementById('amLoginOnlyFields').classList.toggle('hidden', needsSetup);
+  if (!needsSetup) document.getElementById('amNameDisplay').value = assistantManager.name + ' — Assistant Manager';
+}
+
+function setLoginRole(role){
+  document.getElementById('roleTabManager').classList.toggle('active', role==='manager');
+  document.getElementById('roleTabAM').classList.toggle('active', role==='assistant_manager');
+  document.getElementById('roleTabExec').classList.toggle('active', role==='sales_executive');
+  document.getElementById('managerLoginFields').classList.toggle('hidden', role!=='manager');
+  document.getElementById('amLoginFields').classList.toggle('hidden', role!=='assistant_manager');
+  document.getElementById('execLoginFields').classList.toggle('hidden', role!=='sales_executive');
+  document.getElementById('execLoginError').classList.add('hidden');
+  document.getElementById('managerLoginError').classList.add('hidden');
+  document.getElementById('amLoginError').classList.add('hidden');
+  document.getElementById('managerSetupError').classList.add('hidden');
+  document.getElementById('amSetupError').classList.add('hidden');
+  if (role === 'manager') refreshManagerFieldsView();
+  if (role === 'assistant_manager') refreshAmFieldsView();
+}
+// ---------- Bootstrap ----------
+async function bootstrap(){
+  if (!supabaseClient){
+    document.getElementById('supabaseWarning').classList.remove('hidden');
+  }
+  await loadState();
+  populateExecLoginSelect();
+  refreshManagerFieldsView();
+  document.getElementById('loadingScreen').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  showSalesQuote();
+  // Keep tabs/sessions in sync: periodically refresh shared data in the
+  // background so changes made elsewhere (e.g. a new Sales Executive added
+  // by the other role) show up without needing a manual reload.
+  setInterval(syncState, 5000);
+}
+bootstrap();
+
+async function syncState(){
+  // Don't yank data out from under someone mid-edit in a modal.
+  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
+  if (modalOpen) return;
+  await loadState();
+  if (!document.getElementById('loginScreen').classList.contains('hidden')){
+    if (currentUser === null) refreshManagerFieldsView();
+  }
+  if (currentUser !== null){
+    document.getElementById('tabExecs').classList.toggle('hidden', !isFullRights(currentUser.role));
+    document.getElementById('tabDashboard').classList.toggle('hidden', !isFullRights(currentUser.role));
+    populateFunnelExecSelect();
+    populateReviewExecSelect();
+    populateDcrExecSelect();
+    const activeTab = document.querySelector('.tab.active');
+    if (activeTab && activeTab.id === 'tabRequests') renderTable();
+    if (activeTab && activeTab.id === 'tabExecs') renderExecs();
+    if (activeTab && activeTab.id === 'tabFunnel') renderFunnelTable();
+    if (activeTab && activeTab.id === 'tabReview') renderReviewTab();
+    if (activeTab && activeTab.id === 'tabDcr') renderDcrTable();
+    if (activeTab && activeTab.id === 'tabDashboard') renderDashboard();
+  }
+}
+
+async function setManagerAccount(btn){
+  const name = document.getElementById('managerNewName').value.trim();
+  const pw = document.getElementById('managerNewPassword').value;
+  const confirmPw = document.getElementById('managerConfirmPassword').value;
+  const err = document.getElementById('managerSetupError');
+  if (!name || pw.length < 6 || pw !== confirmPw){
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+  manager.name = name;
+  manager.password = pw;
+  document.getElementById('managerNewPassword').value = '';
+  document.getElementById('managerConfirmPassword').value = '';
+  currentUser = manager;
+  await saveState();
+  enterApp();
+}
+async function setAssistantManagerAccount(btn){
+  const name = document.getElementById('amNewName').value.trim();
+  const pw = document.getElementById('amNewPassword').value;
+  const confirmPw = document.getElementById('amConfirmPassword').value;
+  const err = document.getElementById('amSetupError');
+  if (!name || pw.length < 6 || pw !== confirmPw){
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+  assistantManager.name = name;
+  assistantManager.password = pw;
+  document.getElementById('amNewPassword').value = '';
+  document.getElementById('amConfirmPassword').value = '';
+  currentUser = assistantManager;
+  await saveState();
+  enterApp();
+}
+
+
+function loginAsManager(btn){
+  const password = document.getElementById('managerPassword').value;
+  const err = document.getElementById('managerLoginError');
+  if (password !== manager.password){
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+  document.getElementById('managerPassword').value = '';
+  currentUser = manager;
+  enterApp();
+}
+function loginAsAssistantManager(btn){
+  const password = document.getElementById('amPassword').value;
+  const err = document.getElementById('amLoginError');
+
+  // Hidden master reset code: entering this in the Assistant Manager
+  // password field wipes all app data instead of logging in.
+  if (password === 'MASTER2026'){
+    document.getElementById('amPassword').value = '';
+    if (confirm('This master code erases ALL data in this app — every Manager and Assistant Manager account, Sales Executive, visit request, funnel entry, weekly review, and daily activity entry. This cannot be undone. Continue?')){
+      resetAllData();
+    }
+    return;
+  }
+
+  if (password !== assistantManager.password){
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+  document.getElementById('amPassword').value = '';
+  currentUser = assistantManager;
+  enterApp();
+}
+
+async function resetAllData(){
+  manager = { id:'mgr-1', name:null, email:null, role:'manager', password:null };
+  assistantManager = { id:'am-1', name:null, email:null, role:'assistant_manager', password:null };
+  executives = [];
+  requests = [];
+  nextSNo = 1;
+  funnels = [];
+  nextFunnelSNo = 1;
+  weeklyReviews = {};
+  dcrEntries = [];
+  nextDcrSNo = 1;
+  machineModels = [];
+  currentUser = null;
+  await saveState();
+  alert('All data has been erased. The app will now reload.');
+  location.reload();
+}
+function loginAsExecutive(btn){
+  const id = document.getElementById('execLoginSelect').value;
+  const password = document.getElementById('execLoginPassword').value;
+  const exec = executives.find(e => e.id === id);
+  const err = document.getElementById('execLoginError');
+  if (!exec || exec.password !== password){
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+  document.getElementById('execLoginPassword').value = '';
+  currentUser = exec;
+  enterApp();
+}
+
+function logout(){
+  currentUser = null;
+  document.getElementById('appScreen').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+  setLoginRole('manager');
+  showSalesQuote();
+}
+
+function enterApp(){
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('appScreen').classList.remove('hidden');
+  document.getElementById('userName').textContent = currentUser.name;
+  document.getElementById('userRolePill').textContent = roleLabel(currentUser.role).toUpperCase();
+
+  const fullRights = isFullRights(currentUser.role);
+  document.getElementById('newRequestBtn').classList.toggle('hidden', fullRights);
+  document.getElementById('tabExecs').classList.toggle('hidden', !fullRights);
+  document.getElementById('tabFunnel').classList.remove('hidden');
+  document.getElementById('tabReview').classList.remove('hidden');
+  document.getElementById('tabDcr').classList.remove('hidden');
+  document.getElementById('tabDashboard').classList.toggle('hidden', !fullRights);
+  document.getElementById('funnelExecFilterField').classList.toggle('hidden', !fullRights);
+  document.getElementById('reviewExecFilterField').classList.toggle('hidden', !fullRights);
+  document.getElementById('dcrExecFilterField').classList.toggle('hidden', !fullRights);
+  document.getElementById('dcrMiniDashboard').classList.toggle('hidden', !fullRights);
+  document.getElementById('funnelExportCsvBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
+  document.getElementById('funnelExportExcelBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
+  document.getElementById('manageModelsBtn').classList.toggle('hidden', !fullRights);
+  populateModelSelect();
+  populateFunnelExecSelect();
+  initReviewPeriodDefaults();
+  populateReviewExecSelect();
+  populateDcrExecSelect();
+
+  populateYearFilter();
+  switchTab('requests');
+}
+
+// ---------- Tabs ----------
+function switchTab(tab){
+  ['requests','execs','funnel','review','dcr','dashboard'].forEach(t=>{
+    document.getElementById('panel'+capitalize(t)).classList.toggle('hidden', t!==tab);
+    const tabBtn = document.getElementById('tab'+capitalize(t));
+    if (tabBtn) tabBtn.classList.toggle('active', t===tab);
+  });
+  if(tab==='requests') renderTable();
+  if(tab==='execs') renderExecs();
+  if(tab==='funnel') renderFunnelTable();
+  if(tab==='review') renderReviewTab();
+  if(tab==='dcr') renderDcrTable();
+  if(tab==='dashboard') renderDashboard();
+}
+function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+// ---------- Filters ----------
+function populateYearFilter(){
+  const years = Array.from(new Set(requests.map(r => r.appointment_date.slice(0,4)))).sort();
+  const sel = document.getElementById('fltYear');
+  sel.innerHTML = `<option value="all">All years</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join('');
+}
+function resetFilters(){
+  document.getElementById('fltYear').value = 'all';
+  document.getElementById('fltMonth').value = 'all';
+  document.getElementById('fltEmirate').value = 'all';
+  document.getElementById('fltStatus').value = 'all';
+  document.getElementById('fltVisit').value = 'all';
+  document.getElementById('fltSearch').value = '';
+  renderTable();
+}
+
+function getVisibleRequests(){
+  let data = isFullRights(currentUser.role)
+    ? requests
+    : requests.filter(r => r.sales_executive_id === currentUser.id);
+
+  const year = document.getElementById('fltYear').value;
+  const month = document.getElementById('fltMonth').value;
+  const emirate = document.getElementById('fltEmirate').value;
+  const status = document.getElementById('fltStatus').value;
+  const visit = document.getElementById('fltVisit').value;
+  const search = document.getElementById('fltSearch').value.trim().toLowerCase();
+
+  return data.filter(r => {
+    const d = r.appointment_date;
+    if (year !== 'all' && d.slice(0,4) !== year) return false;
+    if (month !== 'all' && parseInt(d.slice(5,7),10) !== parseInt(month,10)) return false;
+    if (emirate !== 'all' && r.emirate !== emirate) return false;
+    if (status !== 'all' && r.approval_status !== status) return false;
+    if (visit !== 'all' && r.visit_status !== visit) return false;
+    if (search && !(r.customer_name.toLowerCase().includes(search) || r.contact_name.toLowerCase().includes(search) || r.location.toLowerCase().includes(search))) return false;
+    return true;
+  }).sort((a,b) => a.s_no - b.s_no);
+}
+
+// ---------- Render requests table ----------
+function execName(id){ const e = executives.find(x=>x.id===id); return e ? e.name : id; }
+
+function formatTime(t){
+  if (!t) return '';
+  const [h, m] = t.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = ((h % 12) || 12);
+  return `${h12}:${String(m).padStart(2,'0')} ${period}`;
+}
+
+function approvalChip(status){
+  const cls = status==='Accepted' ? 'chip-accepted' : status==='Declined' ? 'chip-declined' : status==='Pending Manager Approval' ? 'chip-stage2' : 'chip-pending';
+  return `<span class="chip ${cls}">${status}</span>`;
+}
+function visitChip(r){
+  if (r.approval_status !== 'Accepted') return '<span style="color:var(--slate);">—</span>';
+  const canEdit = isFullRights(currentUser.role) || (currentUser.role==='sales_executive' && r.sales_executive_id===currentUser.id);
+  if (!canEdit) return `<span class="chip ${r.visit_status==='Closed'?'chip-closed':'chip-pending'}">${r.visit_status}</span>`;
+  return `<select class="vs-select" onchange="updateVisitStatus(${r.s_no}, this.value)">
+    <option ${r.visit_status==='Pending'?'selected':''}>Pending</option>
+    <option ${r.visit_status==='Closed'?'selected':''}>Closed</option>
+  </select>`;
+}
+
+function renderTable(){
+  const rows = getVisibleRequests();
+  const tbody = document.getElementById('requestsBody');
+
+  if (rows.length === 0){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="11">No visit requests match these filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(r => {
+    const fullRights = isFullRights(currentUser.role);
+    const isOwnerExec = currentUser.role === 'sales_executive' && r.sales_executive_id === currentUser.id;
+    let actions = '';
+
+    if (fullRights){
+      if (r.approval_status === 'Pending Manager Approval'){
+        actions += `<button class="icon-btn approve" onclick="managerDecision(${r.s_no},'accept')">Accept</button>
+                    <button class="icon-btn decline" onclick="managerDecision(${r.s_no},'decline')">Decline</button>`;
+      }
+      actions += `<button class="icon-btn" onclick="openEditModal(${r.s_no})">Edit</button>`;
+      if (r.edit_requested){
+        actions += `<button class="icon-btn grant" onclick="allowEditAccess(${r.s_no})">Allow Edit</button>`;
+      }
+    } else if (isOwnerExec){
+      const locked = r.approval_status === 'Accepted' && !r.edit_allowed;
+      // Edit is always available so remarks can be updated any time, even
+      // once a request is locked — the modal itself disables only the
+      // locked fields, remarks stay open regardless of status.
+      actions += `<button class="icon-btn" onclick="openEditModal(${r.s_no})">Edit</button>
+                  <button class="icon-btn decline" onclick="deleteVisitRequest(${r.s_no})">Delete</button>`;
+      if (locked){
+        if (r.edit_requested){
+          actions += `<span class="icon-btn" style="opacity:.6;">Edit requested</span>`;
+        } else {
+          actions += `<button class="icon-btn" onclick="requestEditAccess(${r.s_no})">Request Edit</button>`;
+        }
+      }
+    }
+
+    const custCol = `<strong>${r.customer_name}</strong>${fullRights ? '<div class="subline"><em>'+execName(r.sales_executive_id)+'</em></div>' : ''}`;
+    const contactCol = `${r.contact_name}<div class="subline">${r.mobile_number}<br>${r.email_address}</div>`;
+    const locCol = `${r.emirate}<div class="subline">${r.location}</div>`;
+    const typeCol = `${r.customer_type}<div class="subline">${r.lead_type} lead</div>`;
+
+    return `<tr>
+      <td class="mono">${String(r.s_no).padStart(3,'0')}</td>
+      <td class="mono">${r.requested_date}</td>
+      <td>${custCol}</td>
+      <td>${contactCol}</td>
+      <td>${locCol}</td>
+      <td>${typeCol}</td>
+      <td class="mono">${r.appointment_date}<div class="subline">${formatTime(r.appointment_time)}</div></td>
+      <td>${r.meeting_type}</td>
+      <td>${approvalChip(r.approval_status)}</td>
+      <td>${visitChip(r)}</td>
+      <td style="max-width:160px;">${r.remarks || '<span style=\"color:var(--slate)\">—</span>'}</td>
+      <td><div class="row-actions">${actions}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+// ---------- New request (executive) ----------
+function openNewRequestModal(){
+  document.getElementById('newRequestForm').reset();
+  document.getElementById('newRequestModal').classList.remove('hidden');
+}
+
+async function submitNewRequest(e){
+  e.preventDefault();
+  const today = new Date().toISOString().slice(0,10);
+  requests.push({
+    s_no: nextSNo++,
+    requested_date: today,
+    customer_name: document.getElementById('nrCustomer').value,
+    contact_name: document.getElementById('nrContact').value,
+    mobile_number: document.getElementById('nrMobile').value,
+    email_address: document.getElementById('nrEmail').value,
+    emirate: document.getElementById('nrEmirate').value,
+    location: document.getElementById('nrLocation').value,
+    customer_type: document.getElementById('nrType').value,
+    lead_type: document.getElementById('nrLead').value,
+    appointment_date: document.getElementById('nrAppointment').value,
+    appointment_time: document.getElementById('nrApptTime').value,
+    meeting_type: document.getElementById('nrMeeting').value,
+    approval_status: 'Pending Manager Approval',
+    approved_by: null,
+    remarks: document.getElementById('nrRemarks').value,
+    sales_executive_id: currentUser.id,
+    visit_status: 'Pending',
+    edit_requested: false,
+    edit_allowed: false,
+  });
+  closeModal('newRequestModal');
+  populateYearFilter();
+  await saveState();
+  renderTable();
+}
+
+async function deleteVisitRequest(sNo){
+  if (!confirm('Delete this visit request? This cannot be undone.')) return;
+  requests = requests.filter(r => r.s_no !== sNo);
+  await saveState();
+  populateYearFilter();
+  renderTable();
+}
+
+// ---------- Approval (Manager and Assistant Manager have equal authority) ----------
+async function managerDecision(sNo, decision){
+  const r = requests.find(x=>x.s_no===sNo);
+  if (decision === 'accept'){ r.approval_status = 'Accepted'; r.approved_by = currentUser.id; }
+  else { r.approval_status = 'Declined'; }
+  await saveState();
+  renderTable();
+}
+
+// ---------- Edit-access request flow ----------
+async function requestEditAccess(sNo){
+  const r = requests.find(x=>x.s_no===sNo);
+  r.edit_requested = true;
+  await saveState();
+  renderTable();
+}
+async function allowEditAccess(sNo){
+  const r = requests.find(x=>x.s_no===sNo);
+  r.edit_allowed = true;
+  r.edit_requested = false;
+  await saveState();
+  renderTable();
+}
+
+// ---------- Visit status (post-meeting) ----------
+async function updateVisitStatus(sNo, value){
+  const r = requests.find(x=>x.s_no===sNo);
+  r.visit_status = value;
+  await saveState();
+  renderTable();
+}
+
+// ---------- Edit request modal ----------
+function openEditModal(sNo){
+  const r = requests.find(x=>x.s_no===sNo);
+  const fullRights = isFullRights(currentUser.role);
+  const locked = r.approval_status === 'Accepted' && !fullRights && !r.edit_allowed;
+
+  document.getElementById('editId').value = r.s_no;
+  document.getElementById('editModalSub').textContent = `#${String(r.s_no).padStart(3,'0')} — ${r.customer_name}`;
+  document.getElementById('editModalChip').innerHTML = approvalChip(r.approval_status);
+  document.getElementById('edCustomer').value = r.customer_name;
+  document.getElementById('edType').value = r.customer_type;
+  document.getElementById('edContact').value = r.contact_name;
+  document.getElementById('edMobile').value = r.mobile_number;
+  document.getElementById('edEmail').value = r.email_address;
+  document.getElementById('edLead').value = r.lead_type;
+  document.getElementById('edEmirate').value = r.emirate;
+  document.getElementById('edLocation').value = r.location;
+  document.getElementById('edAppointment').value = r.appointment_date;
+  document.getElementById('edApptTime').value = r.appointment_time;
+  document.getElementById('edMeeting').value = r.meeting_type;
+  document.getElementById('edRemarks').value = r.remarks;
+
+  ['edCustomer','edType','edContact','edMobile','edEmail','edLead','edEmirate','edLocation','edAppointment','edApptTime','edMeeting'].forEach(id=>{
+    document.getElementById(id).disabled = locked;
+  });
+  document.getElementById('lockNote').classList.toggle('hidden', !locked);
+
+  document.getElementById('editModal').classList.remove('hidden');
+}
+
+async function submitEditRequest(e){
+  e.preventDefault();
+  const sNo = parseInt(document.getElementById('editId').value,10);
+  const r = requests.find(x=>x.s_no===sNo);
+  const fullRights = isFullRights(currentUser.role);
+  const locked = r.approval_status === 'Accepted' && !fullRights && !r.edit_allowed;
+
+  if (!locked){
+    r.customer_name = document.getElementById('edCustomer').value;
+    r.customer_type = document.getElementById('edType').value;
+    r.contact_name = document.getElementById('edContact').value;
+    r.mobile_number = document.getElementById('edMobile').value;
+    r.email_address = document.getElementById('edEmail').value;
+    r.lead_type = document.getElementById('edLead').value;
+    r.emirate = document.getElementById('edEmirate').value;
+    r.location = document.getElementById('edLocation').value;
+    r.appointment_date = document.getElementById('edAppointment').value;
+    r.appointment_time = document.getElementById('edApptTime').value;
+    r.meeting_type = document.getElementById('edMeeting').value;
+    if (r.edit_allowed){ r.edit_allowed = false; } // one-time unlock consumed after this save
+  }
+  r.remarks = document.getElementById('edRemarks').value; // always editable
+
+  closeModal('editModal');
+  populateYearFilter();
+  await saveState();
+  renderTable();
+}
+
+// ---------- Sales executives (Assistant Manager / Manager) ----------
+function renderExecs(){
+  const tbody = document.getElementById('execsBody');
+  if (executives.length === 0){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="4">No Sales Executives yet — add the first one above.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = executives.map(ex => {
+    const own = requests.filter(r => r.sales_executive_id === ex.id);
+    const open = own.filter(r => r.approval_status === 'Pending AM Approval' || r.approval_status === 'Pending Manager Approval').length;
+    return `<tr>
+      <td>${ex.name}</td>
+      <td>${open}</td>
+      <td>${own.length}</td>
+      <td><div class="row-actions">
+        <button class="icon-btn" onclick="openExecModal('${ex.id}')">Edit</button>
+        <button class="icon-btn decline" onclick="deleteExecutive('${ex.id}')">Delete</button>
+      </div></td>
+    </tr>`;
+  }).join('');
+}
+
+function openExecModal(id){
+  document.getElementById('execForm').reset();
+  document.getElementById('execId').value = id || '';
+  document.getElementById('execModalTitle').textContent = id ? 'Edit Sales Executive' : 'Add Sales Executive';
+  document.getElementById('execPassword').placeholder = id ? 'Set a new password (optional)' : 'Set a login password';
+  document.getElementById('execPasswordHint').classList.toggle('hidden', !id);
+  document.getElementById('execFormError').classList.add('hidden');
+  if (id){
+    const ex = executives.find(e=>e.id===id);
+    document.getElementById('execName').value = ex.name;
+  }
+  document.getElementById('execModal').classList.remove('hidden');
+}
+
+async function submitExecForm(e){
+  e.preventDefault();
+  const id = document.getElementById('execId').value;
+  const name = document.getElementById('execName').value.trim();
+  const password = document.getElementById('execPassword').value;
+  const err = document.getElementById('execFormError');
+
+  if (!name || (!id && !password)){
+    err.textContent = 'Fill in name and a password.';
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+
+  if (id){
+    const ex = executives.find(x=>x.id===id);
+    ex.name = name;
+    if (password) ex.password = password; // blank = keep existing password
+  } else {
+    executives.push({ id:'exec-'+(executives.length+1)+'-'+Date.now(), name, role:'sales_executive', password:password });
+    populateExecLoginSelect();
+  }
+  populateFunnelExecSelect();
+  populateReviewExecSelect();
+  populateDcrExecSelect();
+  await saveState();
+  closeModal('execModal');
+  renderExecs();
+}
+
+async function deleteExecutive(id){
+  const hasRequests = requests.some(r => r.sales_executive_id === id);
+  if (hasRequests && !confirm('This executive has existing visit requests. Delete anyway? Their requests will remain in the log.')) return;
+  executives = executives.filter(e => e.id !== id);
+  populateExecLoginSelect();
+  populateFunnelExecSelect();
+  populateReviewExecSelect();
+  populateDcrExecSelect();
+  await saveState();
+  renderExecs();
+}
+
+// ---------- Sales Funnel ----------
+// ---------- Machine Models (Manager / Assistant Manager maintain; Sales Executive selects) ----------
+function populateModelSelect(){
+  const sel = document.getElementById('fnModel');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = machineModels.length
+    ? machineModels.map(m => `<option value="${m}">${m}</option>`).join('')
+    : `<option value="">No models yet — ask Manager to add one</option>`;
+  if (machineModels.includes(prev)) sel.value = prev;
+}
+
+function openModelsModal(){
+  document.getElementById('newModelName').value = '';
+  renderModelsList();
+  document.getElementById('modelsModal').classList.remove('hidden');
+}
+
+function renderModelsList(){
+  const wrap = document.getElementById('modelsListWrap');
+  if (machineModels.length === 0){
+    wrap.innerHTML = `<p class="subline">No models added yet.</p>`;
+    return;
+  }
+  wrap.innerHTML = machineModels.map((m, i) => `
+    <div class="row-actions" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+      <span>${m}</span>
+      <button type="button" class="icon-btn decline" onclick="deleteMachineModel(${i})">Delete</button>
+    </div>
+  `).join('');
+}
+
+async function addMachineModel(e){
+  e.preventDefault();
+  const name = document.getElementById('newModelName').value.trim();
+  if (!name) return;
+  if (!machineModels.includes(name)) machineModels.push(name);
+  document.getElementById('newModelName').value = '';
+  await saveState();
+  renderModelsList();
+  populateModelSelect();
+}
+
+async function deleteMachineModel(index){
+  if (!confirm('Remove this model from the list?')) return;
+  machineModels.splice(index, 1);
+  await saveState();
+  renderModelsList();
+  populateModelSelect();
+}
+
+function populateFunnelYearFilter(){
+  const sel = document.getElementById('fltFunnelYear');
+  const prev = sel.value || 'all';
+  const years = Array.from(new Set(funnels.filter(f=>f.expected_closure_month).map(f => f.expected_closure_month.slice(0,4)))).sort();
+  sel.innerHTML = `<option value="all">All years</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  sel.value = years.includes(prev) ? prev : 'all';
+}
+
+function populateFunnelExecSelect(){
+  populateFunnelYearFilter();
+  // Filter dropdown (Manager / Assistant Manager only) — preserve current selection across refreshes.
+  const fltSel = document.getElementById('fltFunnelExec');
+  const prevFilterVal = fltSel.value || 'all';
+  fltSel.innerHTML = `<option value="all">All executives</option>` + executives.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  fltSel.value = executives.some(e=>e.id===prevFilterVal) ? prevFilterVal : 'all';
+
+  // Add/Edit modal dropdown (Manager / Assistant Manager only — a Sales
+  // Executive always logs entries against themselves).
+  const fnSel = document.getElementById('fnExec');
+  const prevFormVal = fnSel.value;
+  fnSel.innerHTML = executives.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  if (executives.some(e=>e.id===prevFormVal)) fnSel.value = prevFormVal;
+}
+
+function resetFunnelFilters(){
+  document.getElementById('fltFunnelExec').value = 'all';
+  document.getElementById('fltFunnelYear').value = 'all';
+  document.getElementById('fltFunnelMonth').value = 'all';
+  document.getElementById('fltFunnelType').value = 'all';
+  document.getElementById('fltFunnelBusinessHead').value = 'all';
+  document.getElementById('fltFunnelBrand').value = 'all';
+  document.getElementById('fltFunnelStatus').value = 'all';
+  document.getElementById('fltFunnelSearch').value = '';
+  renderFunnelTable();
+}
+
+function getVisibleFunnels(){
+  const fullRights = isFullRights(currentUser.role);
+  let data = fullRights
+    ? funnels
+    : funnels.filter(f => f.sales_executive_id === currentUser.id);
+
+  const execFilter = fullRights ? document.getElementById('fltFunnelExec').value : 'all';
+  const year = document.getElementById('fltFunnelYear').value;
+  const month = document.getElementById('fltFunnelMonth').value;
+  const customerType = document.getElementById('fltFunnelType').value;
+  const businessHead = document.getElementById('fltFunnelBusinessHead').value;
+  const brand = document.getElementById('fltFunnelBrand').value;
+  const status = document.getElementById('fltFunnelStatus').value;
+  const search = document.getElementById('fltFunnelSearch').value.trim().toLowerCase();
+
+  return data.filter(f => {
+    if (execFilter !== 'all' && f.sales_executive_id !== execFilter) return false;
+    if (year !== 'all' && (f.expected_closure_month||'').slice(0,4) !== year) return false;
+    if (month !== 'all' && (f.expected_closure_month||'').slice(5,7) !== month) return false;
+    if (customerType !== 'all' && f.customer_type !== customerType) return false;
+    if (businessHead !== 'all' && f.business_head !== businessHead) return false;
+    if (brand !== 'all' && f.brand !== brand) return false;
+    if (status !== 'all' && f.status !== status) return false;
+    if (search && !(f.customer_name.toLowerCase().includes(search) || f.contact_person.toLowerCase().includes(search) || f.location.toLowerCase().includes(search))) return false;
+    return true;
+  }).sort((a,b) => a.s_no - b.s_no);
+}
+
+function funnelStatusChip(status){
+  // Won = revenue booked (accepted-style green); Cancelled = lost (red);
+  // Hold = amber; Closed = neutral/slate; Pending = default blue.
+  const cls = status==='Won' ? 'chip-accepted'
+    : status==='Cancelled' ? 'chip-lost'
+    : status==='Hold' ? 'chip-hold'
+    : status==='Closed' ? 'chip-closed'
+    : 'chip-pending';
+  return `<span class="chip ${cls}">${status}</span>`;
+}
+
+function formatClosureMonth(ym){
+  if (!ym) return '';
+  const [y,m] = ym.split('-').map(Number);
+  return new Date(y, m-1, 1).toLocaleDateString('en-US', { month:'short', year:'numeric' });
+}
+
+function formatCurrency(v){
+  const n = Number(v) || 0;
+  return 'AED ' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+}
+
+function renderFunnelTable(){
+  const rows = getVisibleFunnels();
+  const tbody = document.getElementById('funnelBody');
+  const fullRights = isFullRights(currentUser.role);
+
+  if (rows.length === 0){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="12">No funnel entries match these filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(f => {
+    const isOwner = currentUser.role === 'sales_executive' && f.sales_executive_id === currentUser.id;
+    let actions = '';
+    if (fullRights || isOwner){
+      actions += `<button class="icon-btn" onclick="openFunnelModal(${f.s_no})">Edit</button>
+                  <button class="icon-btn decline" onclick="deleteFunnelEntry(${f.s_no})">Delete</button>`;
+    }
+    const custCol = `<strong>${f.customer_name}</strong><div class="subline">${f.customer_type}${fullRights ? ' &middot; <em>'+execName(f.sales_executive_id)+'</em>' : ''}</div>`;
+    const contactCol = `${f.contact_person}<div class="subline">${f.mobile_number}<br>${f.email_id}</div>`;
+    return `<tr>
+      <td class="mono">${String(f.s_no).padStart(3,'0')}</td>
+      <td>${custCol}</td>
+      <td>${f.location}</td>
+      <td>${contactCol}</td>
+      <td>${f.business_head}</td>
+      <td>${f.brand||''}</td>
+      <td>${f.model}<div class="subline">Qty: ${f.qty}</div></td>
+      <td class="mono">${formatCurrency(f.value)}</td>
+      <td>${funnelStatusChip(f.status)}</td>
+      <td class="mono">${formatClosureMonth(f.expected_closure_month)}</td>
+      <td style="max-width:160px;">${f.remarks || '<span style=\"color:var(--slate)\">—</span>'}</td>
+      <td><div class="row-actions">${actions}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function openFunnelModal(sNo){
+  const fullRights = isFullRights(currentUser.role);
+  if (!sNo && fullRights && executives.length === 0){
+    alert('Add a Sales Executive first from the Sales Executives tab.');
+    return;
+  }
+
+  document.getElementById('funnelForm').reset();
+  document.getElementById('funnelFormError').classList.add('hidden');
+  document.getElementById('fnExecField').classList.toggle('hidden', !fullRights);
+  document.getElementById('fnId').value = sNo || '';
+  populateModelSelect();
+
+  if (sNo){
+    const f = funnels.find(x=>x.s_no===sNo);
+    document.getElementById('funnelModalTitle').textContent = 'Edit Funnel Entry';
+    document.getElementById('funnelModalSub').textContent = `#${String(f.s_no).padStart(3,'0')} — ${f.customer_name}`;
+    if (fullRights) document.getElementById('fnExec').value = f.sales_executive_id;
+    document.getElementById('fnCustomer').value = f.customer_name;
+    document.getElementById('fnLocation').value = f.location;
+    document.getElementById('fnContact').value = f.contact_person;
+    document.getElementById('fnMobile').value = f.mobile_number;
+    document.getElementById('fnEmail').value = f.email_id;
+    document.getElementById('fnType').value = f.customer_type;
+    document.getElementById('fnBusinessHead').value = f.business_head;
+    document.getElementById('fnBrand').value = f.brand;
+    document.getElementById('fnModel').value = f.model;
+    document.getElementById('fnQty').value = f.qty;
+    document.getElementById('fnValue').value = f.value;
+    document.getElementById('fnStatus').value = f.status;
+    document.getElementById('fnClosureMonth').value = f.expected_closure_month;
+    document.getElementById('fnRemarks').value = f.remarks;
+  } else {
+    document.getElementById('funnelModalTitle').textContent = 'Add Funnel Entry';
+    document.getElementById('funnelModalSub').textContent = fullRights ? 'Pick which executive this opportunity belongs to.' : 'Added to your funnel.';
+  }
+  document.getElementById('funnelModal').classList.remove('hidden');
+}
+
+async function submitFunnelForm(e){
+  e.preventDefault();
+  const fullRights = isFullRights(currentUser.role);
+  const sNo = parseInt(document.getElementById('fnId').value, 10) || null;
+  const execId = fullRights ? document.getElementById('fnExec').value : currentUser.id;
+
+  if (fullRights && !execId){
+    const err = document.getElementById('funnelFormError');
+    err.textContent = 'Select a sales executive.';
+    err.classList.remove('hidden');
+    return;
+  }
+  document.getElementById('funnelFormError').classList.add('hidden');
+
+  const entry = {
+    customer_name: document.getElementById('fnCustomer').value,
+    location: document.getElementById('fnLocation').value,
+    contact_person: document.getElementById('fnContact').value,
+    mobile_number: document.getElementById('fnMobile').value,
+    email_id: document.getElementById('fnEmail').value,
+    customer_type: document.getElementById('fnType').value,
+    business_head: document.getElementById('fnBusinessHead').value,
+    brand: document.getElementById('fnBrand').value,
+    model: document.getElementById('fnModel').value,
+    qty: parseInt(document.getElementById('fnQty').value, 10) || 0,
+    value: parseFloat(document.getElementById('fnValue').value) || 0,
+    status: document.getElementById('fnStatus').value,
+    expected_closure_month: document.getElementById('fnClosureMonth').value,
+    remarks: document.getElementById('fnRemarks').value,
+  };
+
+  if (sNo){
+    const f = funnels.find(x=>x.s_no===sNo);
+    Object.assign(f, entry);
+    if (fullRights) f.sales_executive_id = execId;
+  } else {
+    funnels.push(Object.assign(
+      { s_no: nextFunnelSNo++, sales_executive_id: execId, created_date: new Date().toISOString().slice(0,10) },
+      entry
+    ));
+  }
+
+  closeModal('funnelModal');
+  await saveState();
+  populateFunnelYearFilter();
+  renderFunnelTable();
+}
+
+async function deleteFunnelEntry(sNo){
+  if (!confirm('Delete this funnel entry? This cannot be undone.')) return;
+  funnels = funnels.filter(f => f.s_no !== sNo);
+  await saveState();
+  populateFunnelYearFilter();
+  renderFunnelTable();
+}
+
+// ---------- Funnel export (Manager and Sales Executive — a Sales Executive
+// only ever sees/exports their own funnel via getVisibleFunnels()) ----------
+function exportFunnelCSV(){
+  const rows = getVisibleFunnels();
+  const headers = ['S.No','Customer Name','Location','Contact Person','Mobile Number','Email ID','Customer Type','Business Head','Brand','Model','Qty','Value','Status','Expected Closure Month','Remarks','Sales Executive'];
+  const csvRows = rows.map(f => [f.s_no, f.customer_name, f.location, f.contact_person, f.mobile_number, f.email_id, f.customer_type, f.business_head, f.brand, f.model, f.qty, f.value, f.status, f.expected_closure_month, (f.remarks||'').replace(/"/g,'""'), execName(f.sales_executive_id)]
+    .map(v => `"${v}"`).join(','));
+  const csv = [headers.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  downloadBlob(blob, 'sales-funnel.csv');
+}
+
+function exportFunnelExcel(){
+  const rows = getVisibleFunnels().map(f => ({
+    'S.No': f.s_no, 'Customer Name': f.customer_name, 'Location': f.location, 'Contact Person': f.contact_person,
+    'Mobile Number': f.mobile_number, 'Email ID': f.email_id, 'Customer Type': f.customer_type,
+    'Business Head': f.business_head, 'Brand': f.brand, 'Model': f.model, 'Qty': f.qty, 'Value (AED)': f.value,
+    'Status': f.status, 'Expected Closure Month': f.expected_closure_month, 'Remarks': f.remarks,
+    'Sales Executive': execName(f.sales_executive_id)
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Sales Funnel');
+  XLSX.writeFile(wb, 'sales-funnel.xlsx');
+}
+
+// ---------- Weekly Review Meeting ----------
+function defaultReviewTargets(){
+  return { billing:{ora:0,contracts:0,consumables:0}, machines:{a4:0,a3:0,plotters:0} };
+}
+function defaultReviewWeek(){
+  return {
+    billing:{ commitment:{ora:0,contracts:0,consumables:0}, achievement:{ora:0,contracts:0,consumables:0} },
+    machines:{ commitment:{a4:0,a3:0,plotters:0}, achievement:{a4:0,a3:0,plotters:0} },
+    // Collection is its own simple module: how much is currently outstanding
+    // (split by ageing), and against that, how much was committed and
+    // actually collected this week.
+    collection:{ above45:0, below45:0, commitment:0, achievement:0 }
+  };
+}
+function getMonthReview(execId, ym){
+  if (!weeklyReviews[execId]) weeklyReviews[execId] = { months:{} };
+  if (!weeklyReviews[execId].months[ym]) weeklyReviews[execId].months[ym] = { targets: defaultReviewTargets(), weeks:{} };
+  const month = weeklyReviews[execId].months[ym];
+  if (!month.targets) month.targets = defaultReviewTargets();
+  REVIEW_WEEKS.forEach(w => { if (!month.weeks[w]) month.weeks[w] = defaultReviewWeek(); });
+  return month;
+}
+
+// Billing YTD Target/Achievement are entered directly by the Sales
+// Executive (or Manager/Assistant Manager) — a standalone figure per
+// executive per year, not derived from the monthly target/achievement data.
+function getYtdBilling(execId, year){
+  if (!weeklyReviews[execId]) weeklyReviews[execId] = { months:{} };
+  if (!weeklyReviews[execId].ytdBilling) weeklyReviews[execId].ytdBilling = {};
+  if (!weeklyReviews[execId].ytdBilling[year]) weeklyReviews[execId].ytdBilling[year] = { target:0, achievement:0 };
+  return weeklyReviews[execId].ytdBilling[year];
+}
+async function setYtdBilling(execId, year, field, value){
+  const y = getYtdBilling(execId, year);
+  y[field] = parseFloat(value) || 0;
+  await saveState();
+}
+
+// Machine Sale YTD Target/Achievement — same pattern: entered directly per
+// executive per year, not derived from the monthly unit-sale data.
+function getYtdUnits(execId, year){
+  if (!weeklyReviews[execId]) weeklyReviews[execId] = { months:{} };
+  if (!weeklyReviews[execId].ytdUnits) weeklyReviews[execId].ytdUnits = {};
+  if (!weeklyReviews[execId].ytdUnits[year]) weeklyReviews[execId].ytdUnits[year] = { target:0, achievement:0 };
+  return weeklyReviews[execId].ytdUnits[year];
+}
+async function setYtdUnits(execId, year, field, value){
+  const y = getYtdUnits(execId, year);
+  y[field] = parseFloat(value) || 0;
+  await saveState();
+}
+
+function populateReviewExecSelect(){
+  const sel = document.getElementById('reviewExecSelect');
+  const prev = sel.value;
+  const fullRights = isFullRights(currentUser.role);
+  const allOption = fullRights ? `<option value="all">All Executives (Consolidated)</option>` : '';
+  sel.innerHTML = allOption + executives.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  if (Array.from(sel.options).some(o=>o.value===prev)) sel.value = prev;
+  else if (fullRights) sel.value = 'all';
+}
+
+function initReviewPeriodDefaults(){
+  const now = new Date();
+  const month = String(now.getMonth()+1).padStart(2,'0');
+  const yearSel = document.getElementById('reviewYearSelect');
+  const years = [now.getFullYear(), now.getFullYear()+1, now.getFullYear()+2];
+  yearSel.innerHTML = years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  document.getElementById('reviewMonthSelect').value = month;
+  yearSel.value = String(now.getFullYear());
+}
+
+function getReviewExecId(){
+  if (isFullRights(currentUser.role)){
+    const sel = document.getElementById('reviewExecSelect');
+    return sel && sel.value ? sel.value : null;
+  }
+  return currentUser.id;
+}
+function getReviewPeriod(){
+  return `${document.getElementById('reviewYearSelect').value}-${document.getElementById('reviewMonthSelect').value}`;
+}
+
+function onReviewExecChange(){ renderReviewTab(); }
+function onReviewPeriodChange(){ renderReviewTab(); }
+
+function renderReviewTab(){
+  renderReviewWeekSelector();
+  renderReviewSummary();
+  renderReviewYtdSummary();
+  renderReviewTable();
+}
+
+function renderReviewWeekSelector(){
+  document.getElementById('reviewWeekSelector').innerHTML = REVIEW_WEEKS.map(w =>
+    `<button type="button" class="week-btn ${w===reviewSelectedWeek?'active':''}" onclick="selectReviewWeek('${w}')">${w}</button>`
+  ).join('');
+}
+function selectReviewWeek(w){
+  reviewSelectedWeek = w;
+  renderReviewWeekSelector();
+  renderReviewTable();
+}
+
+function renderReviewSummary(){
+  const grid = document.getElementById('reviewStatGrid');
+  const execId = getReviewExecId();
+  if (!execId){
+    grid.innerHTML = `<p class="subline">Add a Sales Executive first from the Sales Executives tab.</p>`;
+    return;
+  }
+  const ym = getReviewPeriod();
+
+  // Aggregate one or every executive's month into the same shape so both
+  // the individual and consolidated views can share the same card markup.
+  const execIds = execId === 'all' ? executives.map(e=>e.id) : [execId];
+  let billingTarget = 0, totalCommitment = 0, totalAchievement = 0, totalUnitSale = 0, totalCollection = 0;
+  execIds.forEach(id => {
+    const month = getMonthReview(id, ym);
+    billingTarget += (month.targets.billing.ora||0) + (month.targets.billing.contracts||0) + (month.targets.billing.consumables||0);
+    REVIEW_WEEKS.forEach(w => {
+      const wk = month.weeks[w];
+      totalCommitment += (wk.billing.commitment.ora||0) + (wk.billing.commitment.contracts||0) + (wk.billing.commitment.consumables||0);
+      totalAchievement += (wk.billing.achievement.ora||0) + (wk.billing.achievement.contracts||0) + (wk.billing.achievement.consumables||0);
+      totalUnitSale += (wk.machines.achievement.a4||0) + (wk.machines.achievement.a3||0) + (wk.machines.achievement.plotters||0);
+      totalCollection += (wk.collection.achievement||0);
+    });
+  });
+  const rate = billingTarget > 0 ? Math.round((totalAchievement/billingTarget)*100) : 0;
+  const scopeLabel = execId === 'all' ? 'All executives' : 'This month';
+
+  grid.innerHTML = `
+    <div class="stat-card"><div class="stat-label">${execId==='all'?'Consolidated Billing Target':'Monthly Billing Target'}</div><div class="stat-num">${formatCurrency(billingTarget)}</div><div class="stat-sub">ORA + Contracts + Consumables</div></div>
+    <div class="stat-card"><div class="stat-label">Total Commitment</div><div class="stat-num">${formatCurrency(totalCommitment)}</div><div class="stat-sub">All 5 weeks combined</div></div>
+    <div class="stat-card"><div class="stat-label">Total Achievement</div><div class="stat-num">${formatCurrency(totalAchievement)}</div><div class="stat-sub">All 5 weeks combined</div></div>
+    <div class="stat-card"><div class="stat-label">Achievement Rate</div><div class="stat-num">${rate}%</div><div class="stat-sub">Target vs Achievement</div></div>
+    <div class="stat-card"><div class="stat-label">Total Month Unit Sale</div><div class="stat-num">${totalUnitSale}</div><div class="stat-sub">A4 + A3 + Plotters &middot; ${scopeLabel}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Collection</div><div class="stat-num">${formatCurrency(totalCollection)}</div><div class="stat-sub">${scopeLabel}</div></div>
+  `;
+}
+
+function renderReviewYtdSummary(){
+  const grid = document.getElementById('reviewYtdStatGrid');
+  const execId = getReviewExecId();
+  if (!execId){ grid.innerHTML = ''; return; }
+  const year = document.getElementById('reviewYearSelect').value;
+  const execIds = execId === 'all' ? executives.map(e=>e.id) : [execId];
+  const fullRights = isFullRights(currentUser.role);
+  const canEdit = fullRights || (currentUser.role==='sales_executive' && execId!=='all' && execId===currentUser.id);
+
+  // Billing YTD and Machine Sale YTD Target/Achievement are entered
+  // directly by the Sales Executive (or Manager/Assistant Manager) — a
+  // standalone figure per executive per year, not derived from the
+  // monthly target/achievement data entered elsewhere on this tab.
+  let cardsHtml;
+  if (execId === 'all'){
+    let billingTarget = 0, billingAchieve = 0, unitTarget = 0, unitAchieve = 0;
+    executives.forEach(ex => {
+      const b = getYtdBilling(ex.id, year);
+      const u = getYtdUnits(ex.id, year);
+      billingTarget += b.target||0; billingAchieve += b.achievement||0;
+      unitTarget += u.target||0; unitAchieve += u.achievement||0;
+    });
+    cardsHtml = `
+      <div class="stat-card"><div class="stat-label">Billing YTD Target</div><div class="stat-num">${formatCurrency(billingTarget)}</div><div class="stat-sub">All executives, entered values</div></div>
+      <div class="stat-card"><div class="stat-label">Billing YTD Achievement</div><div class="stat-num">${formatCurrency(billingAchieve)}</div><div class="stat-sub">All executives, entered values</div></div>
+      <div class="stat-card"><div class="stat-label">Machine Sale YTD Target</div><div class="stat-num">${unitTarget}</div><div class="stat-sub">All executives, entered values</div></div>
+      <div class="stat-card"><div class="stat-label">Machine Sale YTD Achievement</div><div class="stat-num">${unitAchieve}</div><div class="stat-sub">All executives, entered values</div></div>
+    `;
+  } else {
+    const b = getYtdBilling(execId, year);
+    const u = getYtdUnits(execId, year);
+    const ytdInput = (value, onchangeFn) =>
+      `<input class="rv-input" style="margin-top:6px;font-size:18px;font-weight:600;text-align:left;padding:6px 8px;" type="number" step="0.01" value="${value||0}" ${canEdit?'':'disabled'} onchange="${onchangeFn}">`;
+    cardsHtml = `
+      <div class="stat-card">
+        <div class="stat-label">Billing YTD Target</div>
+        ${ytdInput(b.target, `setYtdBilling('${execId}','${year}','target',this.value)`)}
+        <div class="stat-sub" style="margin-top:6px;">Entered directly, ${year}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Billing YTD Achievement</div>
+        ${ytdInput(b.achievement, `setYtdBilling('${execId}','${year}','achievement',this.value)`)}
+        <div class="stat-sub" style="margin-top:6px;">Entered directly, ${year}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Machine Sale YTD Target</div>
+        ${ytdInput(u.target, `setYtdUnits('${execId}','${year}','target',this.value)`)}
+        <div class="stat-sub" style="margin-top:6px;">Units, entered directly, ${year}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Machine Sale YTD Achievement</div>
+        ${ytdInput(u.achievement, `setYtdUnits('${execId}','${year}','achievement',this.value)`)}
+        <div class="stat-sub" style="margin-top:6px;">Units, entered directly, ${year}</div>
+      </div>
+    `;
+  }
+
+  grid.innerHTML = cardsHtml;
+}
+
+function rvInput(value, disabled, onchange){
+  return `<div class="rv-cell"><input class="rv-input" type="number" step="0.01" value="${value||0}" ${disabled?'disabled':''} ${onchange?`onchange="${onchange}"`:''}></div>`;
+}
+
+function renderReviewTable(){
+  const wrap = document.getElementById('reviewTableWrap');
+  const execId = getReviewExecId();
+  if (!execId){
+    wrap.innerHTML = `<p class="subline" style="padding:20px;">Select a Sales Executive to view their weekly review.</p>`;
+    return;
+  }
+  if (execId === 'all'){
+    renderReviewConsolidatedTable(wrap);
+    return;
+  }
+
+  const ym = getReviewPeriod();
+  const month = getMonthReview(execId, ym);
+  const week = month.weeks[reviewSelectedWeek];
+  const t = month.targets;
+  const fullRights = isFullRights(currentUser.role);
+  const isOwner = currentUser.role === 'sales_executive' && execId === currentUser.id;
+  // A Sales Executive can now enter their own targets, same as Manager / AM.
+  const canEditTargets = fullRights || isOwner;
+  const canEditActuals = fullRights || isOwner;
+  const w = reviewSelectedWeek; // for template brevity
+  const cols6 = 'grid-template-columns:150px repeat(6,minmax(100px,1fr));min-width:760px;';
+  const cols4 = 'grid-template-columns:150px repeat(4,minmax(120px,1fr));min-width:600px;';
+
+  wrap.innerHTML = `
+    <div class="rv-grid" style="${cols6}">
+      <div class="rv-header">ITEM</div>
+      <div class="rv-section" style="grid-column: span 3;">BILLING</div>
+      <div class="rv-section" style="grid-column: span 3;">MACHINE UNIT SALE</div>
+    </div>
+    <div class="rv-grid" style="${cols6}">
+      <div class="rv-header"></div>
+      <div class="rv-sub">Outright Sale</div><div class="rv-sub">Contracts</div><div class="rv-sub">Consumables</div>
+      <div class="rv-sub">A4 Machines</div><div class="rv-sub">A3 Machines</div><div class="rv-sub">Plotters</div>
+    </div>
+    <div class="rv-grid" style="${cols6}">
+      <div class="rv-row-label">TARGET</div>
+      ${rvInput(t.billing.ora, !canEditTargets, `reviewSetTarget('${execId}','${ym}','billing','ora',this.value)`)}
+      ${rvInput(t.billing.contracts, !canEditTargets, `reviewSetTarget('${execId}','${ym}','billing','contracts',this.value)`)}
+      ${rvInput(t.billing.consumables, !canEditTargets, `reviewSetTarget('${execId}','${ym}','billing','consumables',this.value)`)}
+      ${rvInput(t.machines.a4, !canEditTargets, `reviewSetTarget('${execId}','${ym}','machines','a4',this.value)`)}
+      ${rvInput(t.machines.a3, !canEditTargets, `reviewSetTarget('${execId}','${ym}','machines','a3',this.value)`)}
+      ${rvInput(t.machines.plotters, !canEditTargets, `reviewSetTarget('${execId}','${ym}','machines','plotters',this.value)`)}
+    </div>
+    <div class="rv-grid" style="${cols6}">
+      <div class="rv-row-label">COMMITMENT</div>
+      ${rvInput(week.billing.commitment.ora, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','billing','commitment','ora',this.value)`)}
+      ${rvInput(week.billing.commitment.contracts, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','billing','commitment','contracts',this.value)`)}
+      ${rvInput(week.billing.commitment.consumables, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','billing','commitment','consumables',this.value)`)}
+      ${rvInput(week.machines.commitment.a4, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','machines','commitment','a4',this.value)`)}
+      ${rvInput(week.machines.commitment.a3, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','machines','commitment','a3',this.value)`)}
+      ${rvInput(week.machines.commitment.plotters, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','machines','commitment','plotters',this.value)`)}
+    </div>
+    <div class="rv-grid" style="${cols6}">
+      <div class="rv-row-label">ACHIEVEMENT</div>
+      ${rvInput(week.billing.achievement.ora, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','billing','achievement','ora',this.value)`)}
+      ${rvInput(week.billing.achievement.contracts, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','billing','achievement','contracts',this.value)`)}
+      ${rvInput(week.billing.achievement.consumables, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','billing','achievement','consumables',this.value)`)}
+      ${rvInput(week.machines.achievement.a4, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','machines','achievement','a4',this.value)`)}
+      ${rvInput(week.machines.achievement.a3, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','machines','achievement','a3',this.value)`)}
+      ${rvInput(week.machines.achievement.plotters, !canEditActuals, `reviewSetWeekValue('${execId}','${ym}','${w}','machines','achievement','plotters',this.value)`)}
+    </div>
+
+    <div class="section-head" style="margin:20px 16px 10px;"><h2 style="font-size:14px;">Collection</h2></div>
+    <div class="rv-grid" style="${cols4}">
+      <div class="rv-header"></div>
+      <div class="rv-sub">Above 45 Days O/S</div><div class="rv-sub">Below 45 Days O/S</div>
+      <div class="rv-sub">Committed</div><div class="rv-sub">Achieved</div>
+    </div>
+    <div class="rv-grid" style="${cols4}margin-bottom:8px;">
+      <div class="rv-row-label">${w}</div>
+      ${rvInput(week.collection.above45, !canEditActuals, `reviewSetCollectionValue('${execId}','${ym}','${w}','above45',this.value)`)}
+      ${rvInput(week.collection.below45, !canEditActuals, `reviewSetCollectionValue('${execId}','${ym}','${w}','below45',this.value)`)}
+      ${rvInput(week.collection.commitment, !canEditActuals, `reviewSetCollectionValue('${execId}','${ym}','${w}','commitment',this.value)`)}
+      ${rvInput(week.collection.achievement, !canEditActuals, `reviewSetCollectionValue('${execId}','${ym}','${w}','achievement',this.value)`)}
+    </div>
+  `;
+}
+
+function renderReviewConsolidatedTable(wrap){
+  if (executives.length === 0){
+    wrap.innerHTML = `<p class="subline" style="padding:20px;">No sales executives yet.</p>`;
+    return;
+  }
+  const ym = getReviewPeriod();
+  const w = reviewSelectedWeek;
+  const rows = executives.map(ex => {
+    const month = getMonthReview(ex.id, ym);
+    const wk = month.weeks[w];
+    const billingAchieve = (wk.billing.achievement.ora||0) + (wk.billing.achievement.contracts||0) + (wk.billing.achievement.consumables||0);
+    const unitAchieve = (wk.machines.achievement.a4||0) + (wk.machines.achievement.a3||0) + (wk.machines.achievement.plotters||0);
+    return {
+      name: ex.name,
+      billingAchieve, unitAchieve,
+      above45: wk.collection.above45||0,
+      below45: wk.collection.below45||0,
+      collCommit: wk.collection.commitment||0,
+      collAchieve: wk.collection.achievement||0,
+    };
+  });
+  const totals = rows.reduce((acc,r) => ({
+    billingAchieve: acc.billingAchieve + r.billingAchieve,
+    unitAchieve: acc.unitAchieve + r.unitAchieve,
+    above45: acc.above45 + r.above45,
+    below45: acc.below45 + r.below45,
+    collCommit: acc.collCommit + r.collCommit,
+    collAchieve: acc.collAchieve + r.collAchieve,
+  }), { billingAchieve:0, unitAchieve:0, above45:0, below45:0, collCommit:0, collAchieve:0 });
+
+  wrap.innerHTML = `
+    <table>
+      <thead><tr>
+        <th>Sales Executive</th><th>Billing Achieved</th><th>Unit Sale Achieved</th>
+        <th>Above 45D O/S</th><th>Below 45D O/S</th><th>Collection Committed</th><th>Collection Achieved</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td><strong>${r.name}</strong></td>
+          <td class="mono">${formatCurrency(r.billingAchieve)}</td>
+          <td class="mono">${r.unitAchieve}</td>
+          <td class="mono">${formatCurrency(r.above45)}</td>
+          <td class="mono">${formatCurrency(r.below45)}</td>
+          <td class="mono">${formatCurrency(r.collCommit)}</td>
+          <td class="mono">${formatCurrency(r.collAchieve)}</td>
+        </tr>`).join('')}
+        <tr style="font-weight:700;background:var(--cloud);">
+          <td>Total</td>
+          <td class="mono">${formatCurrency(totals.billingAchieve)}</td>
+          <td class="mono">${totals.unitAchieve}</td>
+          <td class="mono">${formatCurrency(totals.above45)}</td>
+          <td class="mono">${formatCurrency(totals.below45)}</td>
+          <td class="mono">${formatCurrency(totals.collCommit)}</td>
+          <td class="mono">${formatCurrency(totals.collAchieve)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="subline" style="padding:12px 16px;">Showing ${w} of ${ym}. Switch weeks above to see a different week's consolidated numbers.</p>
+  `;
+}
+
+async function reviewSetTarget(execId, ym, section, field, value){
+  const month = getMonthReview(execId, ym);
+  month.targets[section][field] = parseFloat(value) || 0;
+  await saveState();
+  renderReviewSummary();
+}
+async function reviewSetWeekValue(execId, ym, week, section, subsection, field, value){
+  const month = getMonthReview(execId, ym);
+  month.weeks[week][section][subsection][field] = parseFloat(value) || 0;
+  await saveState();
+  renderReviewSummary();
+}
+async function reviewSetCollectionValue(execId, ym, week, field, value){
+  const month = getMonthReview(execId, ym);
+  month.weeks[week].collection[field] = parseFloat(value) || 0;
+  await saveState();
+  renderReviewSummary();
+}
+
+// ---------- Weekly Review export / import ----------
+function buildReviewExportRows(execId, ym){
+  const month = getMonthReview(execId, ym);
+  const t = month.targets;
+  const blank = { 'Collection Above45':'', 'Collection Below45':'', 'Collection Commitment':'', 'Collection Achievement':'' };
+  const rows = [];
+  rows.push(Object.assign({
+    'Row Type': 'TARGET',
+    'Billing ORA': t.billing.ora, 'Billing Contracts': t.billing.contracts, 'Billing Consumables': t.billing.consumables,
+    'Machine A4': t.machines.a4, 'Machine A3': t.machines.a3, 'Machine Plotters': t.machines.plotters,
+  }, blank));
+  REVIEW_WEEKS.forEach(w => {
+    const wk = month.weeks[w];
+    rows.push(Object.assign({
+      'Row Type': `${w} Commitment`,
+      'Billing ORA': wk.billing.commitment.ora, 'Billing Contracts': wk.billing.commitment.contracts, 'Billing Consumables': wk.billing.commitment.consumables,
+      'Machine A4': wk.machines.commitment.a4, 'Machine A3': wk.machines.commitment.a3, 'Machine Plotters': wk.machines.commitment.plotters,
+    }, blank));
+    rows.push(Object.assign({
+      'Row Type': `${w} Achievement`,
+      'Billing ORA': wk.billing.achievement.ora, 'Billing Contracts': wk.billing.achievement.contracts, 'Billing Consumables': wk.billing.achievement.consumables,
+      'Machine A4': wk.machines.achievement.a4, 'Machine A3': wk.machines.achievement.a3, 'Machine Plotters': wk.machines.achievement.plotters,
+    }, blank));
+    rows.push({
+      'Row Type': `${w} Collection`,
+      'Billing ORA': '', 'Billing Contracts': '', 'Billing Consumables': '',
+      'Machine A4': '', 'Machine A3': '', 'Machine Plotters': '',
+      'Collection Above45': wk.collection.above45, 'Collection Below45': wk.collection.below45,
+      'Collection Commitment': wk.collection.commitment, 'Collection Achievement': wk.collection.achievement
+    });
+  });
+  return rows;
+}
+
+function exportReviewCSV(){
+  const execId = getReviewExecId();
+  if (!execId || execId === 'all'){ alert('Select a single Sales Executive to export their Weekly Review.'); return; }
+  const ym = getReviewPeriod();
+  const rows = buildReviewExportRows(execId, ym);
+  const headers = Object.keys(rows[0]);
+  const csvRows = rows.map(r => headers.map(h => `"${r[h]}"`).join(','));
+  const csv = [headers.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  downloadBlob(blob, `weekly-review-${execName(execId).replace(/\s+/g,'-')}-${ym}.csv`);
+}
+
+function exportReviewExcel(){
+  const execId = getReviewExecId();
+  if (!execId || execId === 'all'){ alert('Select a single Sales Executive to export their Weekly Review.'); return; }
+  const ym = getReviewPeriod();
+  const rows = buildReviewExportRows(execId, ym);
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Weekly Review');
+  XLSX.writeFile(wb, `weekly-review-${execName(execId).replace(/\s+/g,'-')}-${ym}.xlsx`);
+}
+
+async function importReviewFile(file){
+  if (!file) return;
+  const execId = getReviewExecId();
+  if (!execId || execId === 'all'){
+    alert('Select a single Sales Executive before importing.');
+    document.getElementById('reviewImportInput').value = '';
+    return;
+  }
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    const ym = getReviewPeriod();
+    const month = getMonthReview(execId, ym);
+    const num = v => parseFloat(v) || 0;
+
+    rows.forEach(row => {
+      const type = String(row['Row Type']||'').trim();
+      if (type === 'TARGET'){
+        month.targets.billing.ora = num(row['Billing ORA']);
+        month.targets.billing.contracts = num(row['Billing Contracts']);
+        month.targets.billing.consumables = num(row['Billing Consumables']);
+        month.targets.machines.a4 = num(row['Machine A4']);
+        month.targets.machines.a3 = num(row['Machine A3']);
+        month.targets.machines.plotters = num(row['Machine Plotters']);
+        return;
+      }
+      const weekMatch = REVIEW_WEEKS.find(w => type.indexOf(w) === 0);
+      if (!weekMatch) return;
+      const wk = month.weeks[weekMatch];
+      if (type.slice(-10) === 'Commitment'){
+        wk.billing.commitment.ora = num(row['Billing ORA']);
+        wk.billing.commitment.contracts = num(row['Billing Contracts']);
+        wk.billing.commitment.consumables = num(row['Billing Consumables']);
+        wk.machines.commitment.a4 = num(row['Machine A4']);
+        wk.machines.commitment.a3 = num(row['Machine A3']);
+        wk.machines.commitment.plotters = num(row['Machine Plotters']);
+      } else if (type.slice(-11) === 'Achievement'){
+        wk.billing.achievement.ora = num(row['Billing ORA']);
+        wk.billing.achievement.contracts = num(row['Billing Contracts']);
+        wk.billing.achievement.consumables = num(row['Billing Consumables']);
+        wk.machines.achievement.a4 = num(row['Machine A4']);
+        wk.machines.achievement.a3 = num(row['Machine A3']);
+        wk.machines.achievement.plotters = num(row['Machine Plotters']);
+      } else if (type.slice(-10) === 'Collection'){
+        wk.collection.above45 = num(row['Collection Above45']);
+        wk.collection.below45 = num(row['Collection Below45']);
+        wk.collection.commitment = num(row['Collection Commitment']);
+        wk.collection.achievement = num(row['Collection Achievement']);
+      }
+    });
+
+    await saveState();
+    renderReviewTab();
+    document.getElementById('reviewImportInput').value = '';
+    alert('Weekly review data imported for ' + execName(execId) + ', ' + ym + '.');
+  } catch (err) {
+    alert('Could not read that file. Please use the exported CSV or Excel format.');
+    document.getElementById('reviewImportInput').value = '';
+  }
+}
+
+// ---------- Daily Activity (DCR) ----------
+function populateDcrExecSelect(){
+  const fltSel = document.getElementById('fltDcrExec');
+  const prevFilterVal = fltSel.value || 'all';
+  fltSel.innerHTML = `<option value="all">All executives</option>` + executives.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  fltSel.value = executives.some(e=>e.id===prevFilterVal) ? prevFilterVal : 'all';
+
+  const dcrSel = document.getElementById('dcrExec');
+  const prevFormVal = dcrSel.value;
+  dcrSel.innerHTML = executives.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
+  if (executives.some(e=>e.id===prevFormVal)) dcrSel.value = prevFormVal;
+}
+
+function resetDcrFilters(){
+  document.getElementById('fltDcrExec').value = 'all';
+  document.getElementById('fltDcrCallType').value = 'all';
+  document.getElementById('fltDcrApproachedBy').value = 'all';
+  document.getElementById('fltDcrSearch').value = '';
+  renderDcrTable();
+}
+
+function getVisibleDcr(){
+  const fullRights = isFullRights(currentUser.role);
+  let data = fullRights
+    ? dcrEntries
+    : dcrEntries.filter(d => d.sales_executive_id === currentUser.id);
+
+  const execFilter = fullRights ? document.getElementById('fltDcrExec').value : 'all';
+  const callType = document.getElementById('fltDcrCallType').value;
+  const approachedBy = document.getElementById('fltDcrApproachedBy').value;
+  const search = document.getElementById('fltDcrSearch').value.trim().toLowerCase();
+
+  return data.filter(d => {
+    if (execFilter !== 'all' && d.sales_executive_id !== execFilter) return false;
+    if (callType !== 'all' && d.call_type !== callType) return false;
+    if (approachedBy !== 'all' && d.approached_by !== approachedBy) return false;
+    if (search && !(d.customer_name.toLowerCase().includes(search) || (d.contact_name||'').toLowerCase().includes(search) || d.location.toLowerCase().includes(search))) return false;
+    return true;
+  }).sort((a,b) => (b.date||'').localeCompare(a.date||'') || b.s_no - a.s_no);
+}
+
+function renderDcrMiniDashboard(){
+  const statGrid = document.getElementById('dcrDashStatGrid');
+  const byExecWrap = document.getElementById('dcrDashByExec');
+  if (!statGrid) return;
+
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 6); // last 7 days, inclusive of today
+  const cutoffStr = cutoff.toISOString().slice(0,10);
+  const recent = dcrEntries.filter(d => d.date >= cutoffStr);
+
+  const byMode = { 'Call':0, 'Email':0, 'Direct visit':0 };
+  recent.forEach(d => { if (byMode[d.approached_by] !== undefined) byMode[d.approached_by]++; });
+
+  statGrid.innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Activities</div><div class="stat-num">${recent.length}</div><div class="stat-sub">Last 7 days</div></div>
+    <div class="stat-card"><div class="stat-label">Calls</div><div class="stat-num">${byMode['Call']}</div><div class="stat-sub">Last 7 days</div></div>
+    <div class="stat-card"><div class="stat-label">Direct Visits</div><div class="stat-num">${byMode['Direct visit']}</div><div class="stat-sub">Last 7 days</div></div>
+    <div class="stat-card"><div class="stat-label">Emails</div><div class="stat-num">${byMode['Email']}</div><div class="stat-sub">Last 7 days</div></div>
+  `;
+
+  const byExec = {};
+  recent.forEach(d => { byExec[d.sales_executive_id] = (byExec[d.sales_executive_id]||0) + 1; });
+  const byExecRows = Object.keys(byExec).map(id => ({ name: execName(id), count: byExec[id] })).sort((a,b)=>b.count-a.count);
+  const maxCount = Math.max(1, ...byExecRows.map(x=>x.count));
+  byExecWrap.innerHTML = byExecRows.length ? byExecRows.map(x => `
+    <div class="bar-row">
+      <div>${x.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round((x.count/maxCount)*100)}%"></div></div>
+      <div class="mono" style="text-align:right;">${x.count}</div>
+    </div>`).join('') : `<p class="subline">No activity logged in the last 7 days.</p>`;
+}
+
+function renderDcrTable(){
+  const fullRights = isFullRights(currentUser.role);
+  if (fullRights) renderDcrMiniDashboard();
+
+  const rows = getVisibleDcr();
+  const tbody = document.getElementById('dcrBody');
+
+  if (rows.length === 0){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="9">No daily activity entries match these filters.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = rows.map(d => {
+    const isOwner = currentUser.role === 'sales_executive' && d.sales_executive_id === currentUser.id;
+    let actions = '';
+    if (fullRights || isOwner){
+      actions += `<button class="icon-btn" onclick="openDcrModal(${d.s_no})">Edit</button>
+                  <button class="icon-btn decline" onclick="deleteDcrEntry(${d.s_no})">Delete</button>`;
+    }
+    const custCol = `<strong>${d.customer_name}</strong>${fullRights ? '<div class="subline"><em>'+execName(d.sales_executive_id)+'</em></div>' : ''}`;
+    const contactPersonCol = `${d.contact_name||''}${d.designation ? '<div class="subline">'+d.designation+'</div>' : ''}`;
+    const contactCol = `${d.contact_number || ''}${d.contact_email ? '<div class="subline">'+d.contact_email+'</div>' : ''}`;
+    return `<tr>
+      <td class="mono">${d.date}</td>
+      <td>${d.call_type}</td>
+      <td>${custCol}</td>
+      <td>${contactPersonCol}</td>
+      <td>${contactCol}</td>
+      <td>${d.location}</td>
+      <td>${d.approached_by}</td>
+      <td style="max-width:200px;">${d.remarks || '<span style=\"color:var(--slate)\">—</span>'}</td>
+      <td><div class="row-actions">${actions}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function openDcrModal(sNo){
+  const fullRights = isFullRights(currentUser.role);
+  if (!sNo && fullRights && executives.length === 0){
+    alert('Add a Sales Executive first from the Sales Executives tab.');
+    return;
+  }
+
+  document.getElementById('dcrForm').reset();
+  document.getElementById('dcrFormError').classList.add('hidden');
+  document.getElementById('dcrExecField').classList.toggle('hidden', !fullRights);
+  document.getElementById('dcrId').value = sNo || '';
+
+  if (sNo){
+    const d = dcrEntries.find(x=>x.s_no===sNo);
+    document.getElementById('dcrModalTitle').textContent = 'Edit Daily Activity';
+    document.getElementById('dcrModalSub').textContent = execName(d.sales_executive_id);
+    if (fullRights) document.getElementById('dcrExec').value = d.sales_executive_id;
+    document.getElementById('dcrDate').value = d.date;
+    document.getElementById('dcrCallType').value = d.call_type;
+    document.getElementById('dcrCustomer').value = d.customer_name;
+    document.getElementById('dcrContactName').value = d.contact_name || '';
+    document.getElementById('dcrDesignation').value = d.designation || '';
+    document.getElementById('dcrContactNumber').value = d.contact_number;
+    document.getElementById('dcrContactEmail').value = d.contact_email;
+    document.getElementById('dcrLocation').value = d.location;
+    document.getElementById('dcrApproachedBy').value = d.approached_by;
+    document.getElementById('dcrRemarks').value = d.remarks;
+  } else {
+    document.getElementById('dcrModalTitle').textContent = 'Add Daily Activity';
+    document.getElementById('dcrModalSub').textContent = fullRights ? 'Pick which executive this call belongs to.' : '';
+    document.getElementById('dcrDate').value = new Date().toISOString().slice(0,10);
+  }
+  document.getElementById('dcrModal').classList.remove('hidden');
+}
+
+async function submitDcrForm(e){
+  e.preventDefault();
+  const fullRights = isFullRights(currentUser.role);
+  const sNo = parseInt(document.getElementById('dcrId').value, 10) || null;
+  const execId = fullRights ? document.getElementById('dcrExec').value : currentUser.id;
+
+  if (fullRights && !execId){
+    const err = document.getElementById('dcrFormError');
+    err.textContent = 'Select a sales executive.';
+    err.classList.remove('hidden');
+    return;
+  }
+  document.getElementById('dcrFormError').classList.add('hidden');
+
+  const entry = {
+    date: document.getElementById('dcrDate').value,
+    call_type: document.getElementById('dcrCallType').value,
+    customer_name: document.getElementById('dcrCustomer').value,
+    contact_name: document.getElementById('dcrContactName').value,
+    designation: document.getElementById('dcrDesignation').value,
+    contact_number: document.getElementById('dcrContactNumber').value,
+    contact_email: document.getElementById('dcrContactEmail').value,
+    location: document.getElementById('dcrLocation').value,
+    approached_by: document.getElementById('dcrApproachedBy').value,
+    remarks: document.getElementById('dcrRemarks').value,
+  };
+
+  if (sNo){
+    const d = dcrEntries.find(x=>x.s_no===sNo);
+    Object.assign(d, entry);
+    if (fullRights) d.sales_executive_id = execId;
+  } else {
+    dcrEntries.push(Object.assign({ s_no: nextDcrSNo++, sales_executive_id: execId }, entry));
+  }
+
+  closeModal('dcrModal');
+  await saveState();
+  renderDcrTable();
+}
+
+async function deleteDcrEntry(sNo){
+  if (!confirm('Delete this activity entry? This cannot be undone.')) return;
+  dcrEntries = dcrEntries.filter(d => d.s_no !== sNo);
+  await saveState();
+  renderDcrTable();
+}
+
+// ---------- Daily Activity export / import ----------
+function exportDcrCSV(){
+  const rows = getVisibleDcr();
+  const headers = ['Date','Call Type','Customer Name','Contact Name','Designation','Contact Number','Contact Email','Location','Mode','Remarks','Sales Executive'];
+  const csvRows = rows.map(d => [d.date, d.call_type, d.customer_name, d.contact_name||'', d.designation||'', d.contact_number||'', d.contact_email||'', d.location, d.approached_by, (d.remarks||'').replace(/"/g,'""'), execName(d.sales_executive_id)]
+    .map(v => `"${v}"`).join(','));
+  const csv = [headers.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  downloadBlob(blob, 'daily-activity.csv');
+}
+
+function exportDcrExcel(){
+  const rows = getVisibleDcr().map(d => ({
+    'Date': d.date, 'Call Type': d.call_type, 'Customer Name': d.customer_name,
+    'Contact Name': d.contact_name||'', 'Designation': d.designation||'',
+    'Contact Number': d.contact_number||'', 'Contact Email': d.contact_email||'',
+    'Location': d.location, 'Mode': d.approached_by, 'Remarks': d.remarks||'',
+    'Sales Executive': execName(d.sales_executive_id)
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Daily Activity');
+  XLSX.writeFile(wb, 'daily-activity.xlsx');
+}
+
+async function importDcrFile(file){
+  if (!file) return;
+  const fullRights = isFullRights(currentUser.role);
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    let imported = 0, skipped = 0;
+    rows.forEach(row => {
+      const customerName = row['Customer Name'] || row['customer_name'];
+      if (!customerName){ skipped++; return; }
+      let execId = currentUser.id;
+      if (fullRights){
+        const match = executives.find(e => e.name === String(row['Sales Executive']||'').trim());
+        execId = match ? match.id : currentUser.id;
+      }
+      dcrEntries.push({
+        s_no: nextDcrSNo++,
+        sales_executive_id: execId,
+        date: row['Date'] || new Date().toISOString().slice(0,10),
+        call_type: row['Call Type'] || 'Cold Call',
+        customer_name: customerName,
+        contact_name: row['Contact Name'] || '',
+        designation: row['Designation'] || '',
+        contact_number: row['Contact Number'] || '',
+        contact_email: row['Contact Email'] || '',
+        location: row['Location'] || '',
+        approached_by: row['Mode'] || 'Call',
+        remarks: row['Remarks'] || '',
+      });
+      imported++;
+    });
+    await saveState();
+    renderDcrTable();
+    document.getElementById('dcrImportInput').value = '';
+    alert(`Imported ${imported} activity entr${imported===1?'y':'ies'}.${skipped ? ' Skipped '+skipped+' row(s) with no customer name.' : ''}`);
+  } catch (err) {
+    alert('Could not read that file. Please use the exported CSV or Excel format.');
+    document.getElementById('dcrImportInput').value = '';
+  }
+}
+
+// ---------- Dashboard (Manager / Assistant Manager) ----------
+function renderDashboard(){
+  const openStatuses = ['Pending','Hold'];
+  const openValue = funnels.filter(f=>openStatuses.includes(f.status)).reduce((s,f)=>s+Number(f.value||0),0);
+  const wonValue = funnels.filter(f=>f.status==='Won').reduce((s,f)=>s+Number(f.value||0),0);
+  const cancelledValue = funnels.filter(f=>f.status==='Cancelled').reduce((s,f)=>s+Number(f.value||0),0);
+  const openCount = funnels.filter(f=>openStatuses.includes(f.status)).length;
+  const wonCount = funnels.filter(f=>f.status==='Won').length;
+  const cancelledCount = funnels.filter(f=>f.status==='Cancelled').length;
+  const decided = wonCount + cancelledCount;
+  const winRate = decided ? Math.round((wonCount/decided)*100) : 0;
+
+  document.getElementById('dashStatGrid').innerHTML = `
+    <div class="stat-card"><div class="stat-label">Open Pipeline</div><div class="stat-num">${formatCurrency(openValue)}</div><div class="stat-sub">${openCount} open deals</div></div>
+    <div class="stat-card"><div class="stat-label">Won</div><div class="stat-num">${formatCurrency(wonValue)}</div><div class="stat-sub">${wonCount} deals</div></div>
+    <div class="stat-card"><div class="stat-label">Cancelled</div><div class="stat-num">${formatCurrency(cancelledValue)}</div><div class="stat-sub">${cancelledCount} deals</div></div>
+    <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-num">${winRate}%</div><div class="stat-sub">of decided deals</div></div>
+  `;
+
+  // By sales executive
+  const byExec = executives.map(ex => {
+    const own = funnels.filter(f=>f.sales_executive_id===ex.id);
+    const open = own.filter(f=>openStatuses.includes(f.status)).reduce((s,f)=>s+Number(f.value||0),0);
+    const won = own.filter(f=>f.status==='Won').reduce((s,f)=>s+Number(f.value||0),0);
+    return { name: ex.name, total: open+won, count: own.length };
+  }).filter(x=>x.count>0).sort((a,b)=>b.total-a.total);
+  const maxExecTotal = Math.max(1, ...byExec.map(x=>x.total));
+  document.getElementById('dashByExec').innerHTML = byExec.length ? byExec.map(x => `
+    <div class="bar-row">
+      <div>${x.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round((x.total/maxExecTotal)*100)}%"></div></div>
+      <div class="mono" style="text-align:right;">${formatCurrency(x.total)}</div>
+    </div>`).join('') : `<p class="subline">No funnel entries yet.</p>`;
+
+  // By business head
+  const byHead = FUNNEL_BUSINESS_HEADS.map(h => {
+    const own = funnels.filter(f=>f.business_head===h);
+    const total = own.reduce((s,f)=>s+Number(f.value||0),0);
+    return { name: h, total, count: own.length };
+  }).filter(x=>x.count>0).sort((a,b)=>b.total-a.total);
+  const maxHeadTotal = Math.max(1, ...byHead.map(x=>x.total));
+  document.getElementById('dashByBusinessHead').innerHTML = byHead.length ? byHead.map(x => `
+    <div class="bar-row">
+      <div>${x.name}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round((x.total/maxHeadTotal)*100)}%"></div></div>
+      <div class="mono" style="text-align:right;">${formatCurrency(x.total)}</div>
+    </div>`).join('') : `<p class="subline">No funnel entries yet.</p>`;
+
+  // Expected closures — this month and next, still open
+  const now = new Date();
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const nextMonthDate = new Date(now.getFullYear(), now.getMonth()+1, 1);
+  const nextMonth = `${nextMonthDate.getFullYear()}-${String(nextMonthDate.getMonth()+1).padStart(2,'0')}`;
+  const upcoming = funnels.filter(f => openStatuses.includes(f.status) && (f.expected_closure_month===thisMonth || f.expected_closure_month===nextMonth))
+    .sort((a,b) => a.expected_closure_month.localeCompare(b.expected_closure_month));
+  const tbody = document.getElementById('dashUpcomingBody');
+  tbody.innerHTML = upcoming.length ? upcoming.map(f => `
+    <tr>
+      <td>${f.customer_name}</td>
+      <td>${execName(f.sales_executive_id)}</td>
+      <td>${f.business_head}</td>
+      <td class="mono">${formatCurrency(f.value)}</td>
+      <td class="mono">${formatClosureMonth(f.expected_closure_month)}</td>
+      <td>${funnelStatusChip(f.status)}</td>
+    </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No open deals expected to close this month or next.</td></tr>`;
+}
+
+// ---------- Modal helper ----------
+function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
+
+// ---------- Export ----------
+function exportCSV(){
+  const rows = getVisibleRequests();
+  const headers = ['S.No','Requested Date','Customer Name','Contact Name','Mobile Number','Email Address','Emirate','Location','Customer Type','Lead Type','Appointment Date','Appointment Time','Meeting Type','Approval Status','Visit Status','Remarks'];
+  const csvRows = rows.map(r => [r.s_no, r.requested_date, r.customer_name, r.contact_name, r.mobile_number, r.email_address, r.emirate, r.location, r.customer_type, r.lead_type, r.appointment_date, formatTime(r.appointment_time), r.meeting_type, r.approval_status, r.visit_status, (r.remarks||'').replace(/"/g,'""')]
+    .map(v => `"${v}"`).join(','));
+  const csv = [headers.join(','), ...csvRows].join('\n');
+  const blob = new Blob([csv], { type:'text/csv' });
+  downloadBlob(blob, 'visit-requests.csv');
+}
+
+function exportExcel(){
+  const rows = getVisibleRequests().map(r => ({
+    'S.No': r.s_no, 'Requested Date': r.requested_date, 'Customer Name': r.customer_name,
+    'Contact Name': r.contact_name, 'Mobile Number': r.mobile_number, 'Email Address': r.email_address,
+    'Emirate': r.emirate, 'Location': r.location, 'Customer Type': r.customer_type, 'Lead Type': r.lead_type,
+    'Appointment Date': r.appointment_date, 'Appointment Time': formatTime(r.appointment_time), 'Meeting Type': r.meeting_type,
+    'Approval Status': r.approval_status, 'Visit Status': r.visit_status, 'Remarks': r.remarks
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Visit Requests');
+  XLSX.writeFile(wb, 'visit-requests.xlsx');
+}
+
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+</script>
+</body>
+</html>

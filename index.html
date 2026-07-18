@@ -183,6 +183,15 @@
   ⚠️ Supabase isn't configured yet, so nothing you enter will be saved. Open this file's HTML, find <code>SUPABASE_URL</code> / <code>SUPABASE_ANON_KEY</code> near the top of the script, and fill in your Supabase project's values.
 </div>
 
+<!-- ============ SAVE/LOAD ERROR BANNER ============ -->
+<!-- Shown whenever a save or load to Supabase actually fails (bad RLS
+     policy, missing table, wrong key, network issue, etc.) so failures are
+     never silent — previously these only went to the browser console. -->
+<div id="saveErrorBanner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#B42318;color:white;font-family:'Inter',sans-serif;font-size:13.5px;padding:10px 16px;text-align:center;">
+  ⚠️ Couldn't save to Supabase: <span id="saveErrorText" class="mono"></span>
+  <button onclick="document.getElementById('saveErrorBanner').classList.add('hidden')" style="margin-left:10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:3px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Dismiss</button>
+</div>
+
 <!-- ============ LOADING SCREEN ============ -->
 <div id="loadingScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#14213D;color:white;font-family:'Inter',sans-serif;font-size:14px;">
   Loading…
@@ -357,6 +366,7 @@
           <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
           <button class="btn btn-secondary" onclick="exportCSV()">Export CSV</button>
           <button class="btn btn-primary" onclick="exportExcel()">Export Excel</button>
+          <button class="btn btn-secondary" onclick="forceSaveNow(this)">💾 Save Now</button>
           <button class="btn btn-primary hidden" id="newRequestBtn" onclick="openNewRequestModal()">+ New Visit Request</button>
         </div>
       </div>
@@ -380,7 +390,10 @@
       <div class="card">
         <div class="section-head">
           <h2>Sales Executives</h2>
-          <button class="btn btn-primary" onclick="openExecModal()">+ Add Executive</button>
+          <div style="display:flex;gap:10px;">
+            <button class="btn btn-secondary" onclick="forceSaveNow(this)">💾 Save Now</button>
+            <button class="btn btn-primary" onclick="openExecModal()">+ Add Executive</button>
+          </div>
         </div>
         <table>
           <thead><tr><th>Name</th><th>Open Requests</th><th>Total Requests</th><th>Actions</th></tr></thead>
@@ -451,6 +464,7 @@
             <input type="file" id="funnelImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importFunnelFile(this.files[0])">
           </label>
           <button class="btn btn-secondary hidden" id="manageModelsBtn" onclick="openModelsModal()">⚙ Manage Models</button>
+          <button class="btn btn-secondary" onclick="forceSaveNow(this)">💾 Save Now</button>
           <button class="btn btn-primary" onclick="openFunnelModal()">+ Add Funnel Entry</button>
         </div>
       </div>
@@ -495,6 +509,7 @@
           <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
             <input type="file" id="reviewImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importReviewFile(this.files[0])">
           </label>
+          <button class="btn btn-primary" onclick="forceSaveNow(this)">💾 Save Now</button>
         </div>
       </div>
       <p class="subline" id="reviewTargetsNote" style="margin:-10px 0 16px 2px;">Target row can be set by you or by Manager / Assistant Manager; Commitment and Achievement are filled in weekly.</p>
@@ -548,6 +563,7 @@
           <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
             <input type="file" id="dcrImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importDcrFile(this.files[0])">
           </label>
+          <button class="btn btn-secondary" onclick="forceSaveNow(this)">💾 Save Now</button>
           <button class="btn btn-primary" onclick="openDcrModal()">+ Add Activity</button>
         </div>
       </div>
@@ -820,58 +836,9 @@
 <script>
 /* ==========================================================================
    MANCHESTER TECHNOLOGY — FIELD VISIT MANAGER
-
-   Frontend prototype. Data (including Manager/Assistant Manager passwords
-   and Sales Executive accounts) is held in memory only — everything resets
-   on reload. Swap the functions below for real backend calls (Supabase
-   Auth, Firebase Auth, etc.) for production use.
-
-   FIRST-TIME ACCOUNT SETUP: Manager and Assistant Manager don't ship with a
-   name or password. The first time either signs in, they're prompted to
-   set both on the spot (see setManagerAccount / setAssistantManagerAccount);
-   after that it behaves like a normal password login for the rest of the
-   session.
-
-   No sample data ships either: visit requests start empty, and Sales
-   Executives start with an empty roster — Manager/Assistant Manager add
-   each executive fresh from the Sales Executives tab.
-
-   APPROVAL WORKFLOW (single stage):
-     A Sales Executive submits a request directly to "Pending Manager
-     Approval" — Manager and Assistant Manager both hold full rights and
-     can Accept or Decline it. Accepting sets "Accepted"; declining sets
-     "Declined". The appointment date (and other core fields) lock for the
-     sales executive only once a request reaches "Accepted". Assistant
-     Manager and Manager can always edit, since both hold full rights.
-
-   EDIT-ACCESS REQUESTS: once locked, a sales executive can request a
-   one-time re-open (edit_requested). An Assistant Manager or Manager can
-   grant it (edit_allowed), which unlocks the request for a single edit;
-   saving that edit re-locks it automatically.
-
-   VISIT STATUS: separate from approval — the owning sales executive marks
-   a request Pending/Closed after the meeting happens (only available once
-   the request is fully Accepted).
-
-   NOTE ON ASSUMPTIONS: "Lead Type" values (ORS/Contract/Consumables/Lease)
-   match what was requested.
-
-   SHARED STORAGE: all business data (Manager/Assistant Manager accounts,
-   Sales Executives, and visit requests) is persisted to Supabase as one
-   shared JSON record, so Manager, Assistant Manager, and every Sales
-   Executive see the same live data across tabs, devices, and sessions —
-   not just in one browser tab's memory. This data is visible to anyone
-   using this app who has the Supabase anon key below (paired with the RLS
-   policy from schema.sql, which currently allows any anon-key caller full
-   access — see schema.sql for how to tighten that later).
    ========================================================================== */
 
 // ---------- Supabase connection ----------
-// Fill these in from your Supabase project (Project Settings -> API):
-//   SUPABASE_URL       -> "Project URL"
-//   SUPABASE_ANON_KEY   -> "anon" "public" key (safe to expose client-side)
-// Then run the matching table-creation SQL (the `app_state` table, see the
-// bottom of schema.sql / the note in chat) in the Supabase SQL editor.
 const SUPABASE_URL = 'https://vxekwlvxhwhhkrithdum.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_WeXs5IyuRn5k-q5mK8iHBA_vkGUrp0l';
 const supabaseClient = (SUPABASE_URL.startsWith('http'))
@@ -898,47 +865,87 @@ function showSalesQuote(){
 }
 
 // ---------- Shared "database" ----------
-// Manager and Assistant Manager start with no name or password — each sets
-// both the first time they sign in (see setManagerAccount / setAssistantManagerAccount).
 let manager = { id:'mgr-1', name:null, email:null, role:'manager', password:null };
 let assistantManager = { id:'am-1', name:null, email:null, role:'assistant_manager', password:null };
 
-// No sales executives are seeded — Manager/Assistant Manager add each one
-// fresh from the Sales Executives tab.
 let executives = [];
 
 let requests = [];
 
-let nextSNo = 1;
-
-// Sales Funnel — each sales executive's pipeline of opportunities. Manager
-// and Assistant Manager have full access across every executive's funnel;
-// a Sales Executive only sees and manages their own entries.
 let funnels = [];
-let nextFunnelSNo = 1;
 const FUNNEL_BUSINESS_HEADS = ['ORS','Lease','Consumables','FSMA','AMC','Spot','Mis.Spares'];
 
-// Machine Models — a manager-maintained list of models that populates the
-// Model dropdown on the Sales Funnel form for every Sales Executive.
 let machineModels = [];
 
-// Weekly Review Meeting — a monthly billing/machine-sales/collection target
-// vs. commitment vs. achievement grid per Sales Executive, broken down by
-// week. Manager and Assistant Manager have full access across every
-// executive; a Sales Executive only sees and fills in their own.
 const REVIEW_WEEKS = ['Week 1','Week 2','Week 3','Week 4','Week 5'];
-let weeklyReviews = {}; // weeklyReviews[execId].months["YYYY-MM"] = { targets:{...}, weeks:{...} }
+let weeklyReviews = {};
 let reviewSelectedWeek = 'Week 1';
 
-// Daily Activity (DCR) — a daily call/visit log. Manager and Assistant
-// Manager have full access across every executive; a Sales Executive only
-// sees and manages their own entries.
 let dcrEntries = [];
 let nextDcrSNo = 1;
 
 // ---------- Session state ----------
 let currentUser = null; // { id, name, email, role }
 let filters = { year:'all', month:'all', emirate:'all', status:'all', visit:'all', search:'' };
+
+// ---------- Save / background-sync safety guards ----------
+// BUG FIX: previously, the 5-second background sync (syncState) could fire
+// while a save to Supabase was still in flight, fetch the pre-save data,
+// and overwrite a just-added Funnel entry or Weekly Review edit — this is
+// what caused data to "reset" right after importing or typing.
+//
+// saveInFlight is bumped the instant saveState() starts running. Because
+// JS runs each block of code to completion before anything else (like the
+// setInterval tick) can run, saveInFlight is guaranteed to already be >0
+// before the background sync gets a chance to run again.
+let saveInFlight = 0;
+// pendingLocalChanges: true whenever a local edit has been made but not yet
+// sent to Supabase (used by the debounced Weekly Review saves below).
+let pendingLocalChanges = false;
+let saveDebounceTimer = null;
+
+// Generates a short unique id, used so each Funnel entry / Visit Request
+// has a stable identity that's independent of any Sr. No counter.
+function genUid(prefix){
+  return prefix + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+// One-time migration: older saved data may not have a uid yet — assign one
+// so nothing breaks for records created before this fix.
+function migrateUids(){
+  funnels.forEach(f => { if (!f.uid) f.uid = genUid('fn'); });
+  requests.forEach(r => { if (!r.uid) r.uid = genUid('req'); });
+}
+
+// BUG FIX (Weekly Review lag / data not storing): instead of saving to
+// Supabase on every single keystroke, updates the local UI instantly and
+// waits briefly before writing — so editing several fields in a row sends
+// one save instead of one per field. While a save is pending or in flight,
+// syncState() skips itself so it can never overwrite an edit that hasn't
+// been saved yet.
+function scheduleDebouncedSave(delay){
+  pendingLocalChanges = true;
+  if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+  saveDebounceTimer = setTimeout(async () => {
+    saveDebounceTimer = null;
+    await saveState();
+    pendingLocalChanges = false;
+  }, delay || 800);
+}
+
+// Explicit "💾 Save Now" button on every tab — flushes any pending
+// debounced save immediately and shows a brief confirmation on the button.
+async function forceSaveNow(btn){
+  if (saveDebounceTimer){ clearTimeout(saveDebounceTimer); saveDebounceTimer = null; }
+  await saveState();
+  pendingLocalChanges = false;
+  if (btn){
+    const original = btn.textContent;
+    btn.textContent = '✓ Saved';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = original; btn.disabled = false; }, 1400);
+  }
+}
 
 // ---------- Shared storage load/save ----------
 async function loadState(){
@@ -959,18 +966,26 @@ async function loadState(){
       assistantManager = stateData.assistantManager || assistantManager;
       executives = stateData.executives || [];
       requests = stateData.requests || [];
-      nextSNo = stateData.nextSNo || 1;
       funnels = stateData.funnels || [];
-      nextFunnelSNo = stateData.nextFunnelSNo || 1;
       weeklyReviews = stateData.weeklyReviews || {};
       dcrEntries = stateData.dcrEntries || [];
       nextDcrSNo = stateData.nextDcrSNo || 1;
       machineModels = stateData.machineModels || [];
     }
     // No row yet (data is null) -> first run, keep the defaults above.
+    migrateUids();
   } catch (err) {
     console.error('Failed to load state from Supabase:', err);
+    showSaveError((err && err.message) ? err.message : String(err));
   }
+}
+
+function showSaveError(message){
+  const banner = document.getElementById('saveErrorBanner');
+  const text = document.getElementById('saveErrorText');
+  if (!banner || !text) return;
+  text.textContent = message;
+  banner.classList.remove('hidden');
 }
 
 async function saveState(){
@@ -978,14 +993,18 @@ async function saveState(){
     console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
     return;
   }
+  saveInFlight++;
   try {
-    const payload = { manager, assistantManager, executives, requests, nextSNo, funnels, nextFunnelSNo, weeklyReviews, dcrEntries, nextDcrSNo, machineModels };
+    const payload = { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, machineModels };
     const { error } = await supabaseClient
       .from('app_state')
       .upsert({ id: STATE_ROW_ID, value: payload, updated_at: new Date().toISOString() });
     if (error) throw error;
   } catch (err) {
     console.error('Failed to save state to Supabase:', err);
+    showSaveError((err && err.message) ? err.message : String(err));
+  } finally {
+    saveInFlight--;
   }
 }
 
@@ -1000,8 +1019,6 @@ function populateExecLoginSelect(){
   document.getElementById('execLoginFormFields').classList.toggle('hidden', executives.length === 0);
 }
 
-// Shows the "create a password" fields the first time a Manager/Assistant
-// Manager signs in, and the normal password field every time after.
 function refreshManagerFieldsView(){
   const needsSetup = manager.password === null;
   document.getElementById('managerSetupFields').classList.toggle('hidden', !needsSetup);
@@ -1041,17 +1058,15 @@ async function bootstrap(){
   document.getElementById('loadingScreen').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
   showSalesQuote();
-  // Keep tabs/sessions in sync: periodically refresh shared data in the
-  // background so changes made elsewhere (e.g. a new Sales Executive added
-  // by the other role) show up without needing a manual reload.
   setInterval(syncState, 5000);
 }
 bootstrap();
 
 async function syncState(){
-  // Don't yank data out from under someone mid-edit in a modal.
+  // Don't yank data out from under someone mid-edit in a modal, mid-save,
+  // or while a debounced edit (e.g. Weekly Review) hasn't been written yet.
   const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
-  if (modalOpen) return;
+  if (modalOpen || saveInFlight > 0 || pendingLocalChanges) return;
   await loadState();
   if (!document.getElementById('loginScreen').classList.contains('hidden')){
     if (currentUser === null) refreshManagerFieldsView();
@@ -1126,8 +1141,6 @@ function loginAsAssistantManager(btn){
   const password = document.getElementById('amPassword').value;
   const err = document.getElementById('amLoginError');
 
-  // Hidden master reset code: entering this in the Assistant Manager
-  // password field wipes all app data instead of logging in.
   if (password === 'MASTER2026'){
     document.getElementById('amPassword').value = '';
     if (confirm('This master code erases ALL data in this app — every Manager and Assistant Manager account, Sales Executive, visit request, funnel entry, weekly review, and daily activity entry. This cannot be undone. Continue?')){
@@ -1151,9 +1164,7 @@ async function resetAllData(){
   assistantManager = { id:'am-1', name:null, email:null, role:'assistant_manager', password:null };
   executives = [];
   requests = [];
-  nextSNo = 1;
   funnels = [];
-  nextFunnelSNo = 1;
   weeklyReviews = {};
   dcrEntries = [];
   nextDcrSNo = 1;
@@ -1179,6 +1190,12 @@ function loginAsExecutive(btn){
 }
 
 function logout(){
+  if (saveDebounceTimer){
+    clearTimeout(saveDebounceTimer);
+    saveDebounceTimer = null;
+    saveState();
+    pendingLocalChanges = false;
+  }
   currentUser = null;
   document.getElementById('appScreen').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
@@ -1269,7 +1286,21 @@ function getVisibleRequests(){
     if (visit !== 'all' && r.visit_status !== visit) return false;
     if (search && !(r.customer_name.toLowerCase().includes(search) || r.contact_name.toLowerCase().includes(search) || r.location.toLowerCase().includes(search))) return false;
     return true;
-  }).sort((a,b) => a.s_no - b.s_no);
+  });
+}
+
+// BUG FIX (Sr. No skipping/overlapping): previously every visit request
+// shared one global counter, so one executive's Sr. No sequence would skip
+// numbers taken by other executives. This computes a Sr. No that is always
+// sequential 1, 2, 3... within each executive's own requests only.
+function requestDisplayNumbers(){
+  const counters = {};
+  const map = {};
+  requests.forEach(r => {
+    counters[r.sales_executive_id] = (counters[r.sales_executive_id] || 0) + 1;
+    map[r.uid] = counters[r.sales_executive_id];
+  });
+  return map;
 }
 
 // ---------- Render requests table ----------
@@ -1291,7 +1322,7 @@ function visitChip(r){
   if (r.approval_status !== 'Accepted') return '<span style="color:var(--slate);">—</span>';
   const canEdit = isFullRights(currentUser.role) || (currentUser.role==='sales_executive' && r.sales_executive_id===currentUser.id);
   if (!canEdit) return `<span class="chip ${r.visit_status==='Closed'?'chip-closed':'chip-pending'}">${r.visit_status}</span>`;
-  return `<select class="vs-select" onchange="updateVisitStatus(${r.s_no}, this.value)">
+  return `<select class="vs-select" onchange="updateVisitStatus('${r.uid}', this.value)">
     <option ${r.visit_status==='Pending'?'selected':''}>Pending</option>
     <option ${r.visit_status==='Closed'?'selected':''}>Closed</option>
   </select>`;
@@ -1300,6 +1331,7 @@ function visitChip(r){
 function renderTable(){
   const rows = getVisibleRequests();
   const tbody = document.getElementById('requestsBody');
+  const displayMap = requestDisplayNumbers();
 
   if (rows.length === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="11">No visit requests match these filters.</td></tr>`;
@@ -1313,25 +1345,22 @@ function renderTable(){
 
     if (fullRights){
       if (r.approval_status === 'Pending Manager Approval'){
-        actions += `<button class="icon-btn approve" onclick="managerDecision(${r.s_no},'accept')">Accept</button>
-                    <button class="icon-btn decline" onclick="managerDecision(${r.s_no},'decline')">Decline</button>`;
+        actions += `<button class="icon-btn approve" onclick="managerDecision('${r.uid}','accept')">Accept</button>
+                    <button class="icon-btn decline" onclick="managerDecision('${r.uid}','decline')">Decline</button>`;
       }
-      actions += `<button class="icon-btn" onclick="openEditModal(${r.s_no})">Edit</button>`;
+      actions += `<button class="icon-btn" onclick="openEditModal('${r.uid}')">Edit</button>`;
       if (r.edit_requested){
-        actions += `<button class="icon-btn grant" onclick="allowEditAccess(${r.s_no})">Allow Edit</button>`;
+        actions += `<button class="icon-btn grant" onclick="allowEditAccess('${r.uid}')">Allow Edit</button>`;
       }
     } else if (isOwnerExec){
       const locked = r.approval_status === 'Accepted' && !r.edit_allowed;
-      // Edit is always available so remarks can be updated any time, even
-      // once a request is locked — the modal itself disables only the
-      // locked fields, remarks stay open regardless of status.
-      actions += `<button class="icon-btn" onclick="openEditModal(${r.s_no})">Edit</button>
-                  <button class="icon-btn decline" onclick="deleteVisitRequest(${r.s_no})">Delete</button>`;
+      actions += `<button class="icon-btn" onclick="openEditModal('${r.uid}')">Edit</button>
+                  <button class="icon-btn decline" onclick="deleteVisitRequest('${r.uid}')">Delete</button>`;
       if (locked){
         if (r.edit_requested){
           actions += `<span class="icon-btn" style="opacity:.6;">Edit requested</span>`;
         } else {
-          actions += `<button class="icon-btn" onclick="requestEditAccess(${r.s_no})">Request Edit</button>`;
+          actions += `<button class="icon-btn" onclick="requestEditAccess('${r.uid}')">Request Edit</button>`;
         }
       }
     }
@@ -1342,7 +1371,7 @@ function renderTable(){
     const typeCol = `${r.customer_type}<div class="subline">${r.lead_type} lead</div>`;
 
     return `<tr>
-      <td class="mono">${String(r.s_no).padStart(3,'0')}</td>
+      <td class="mono">${String(displayMap[r.uid]||0).padStart(3,'0')}</td>
       <td class="mono">${r.requested_date}</td>
       <td>${custCol}</td>
       <td>${contactCol}</td>
@@ -1368,7 +1397,7 @@ async function submitNewRequest(e){
   e.preventDefault();
   const today = new Date().toISOString().slice(0,10);
   requests.push({
-    s_no: nextSNo++,
+    uid: genUid('req'),
     requested_date: today,
     customer_name: document.getElementById('nrCustomer').value,
     contact_name: document.getElementById('nrContact').value,
@@ -1395,17 +1424,17 @@ async function submitNewRequest(e){
   renderTable();
 }
 
-async function deleteVisitRequest(sNo){
+async function deleteVisitRequest(uid){
   if (!confirm('Delete this visit request? This cannot be undone.')) return;
-  requests = requests.filter(r => r.s_no !== sNo);
+  requests = requests.filter(r => r.uid !== uid);
   await saveState();
   populateYearFilter();
   renderTable();
 }
 
 // ---------- Approval (Manager and Assistant Manager have equal authority) ----------
-async function managerDecision(sNo, decision){
-  const r = requests.find(x=>x.s_no===sNo);
+async function managerDecision(uid, decision){
+  const r = requests.find(x=>x.uid===uid);
   if (decision === 'accept'){ r.approval_status = 'Accepted'; r.approved_by = currentUser.id; }
   else { r.approval_status = 'Declined'; }
   await saveState();
@@ -1413,14 +1442,14 @@ async function managerDecision(sNo, decision){
 }
 
 // ---------- Edit-access request flow ----------
-async function requestEditAccess(sNo){
-  const r = requests.find(x=>x.s_no===sNo);
+async function requestEditAccess(uid){
+  const r = requests.find(x=>x.uid===uid);
   r.edit_requested = true;
   await saveState();
   renderTable();
 }
-async function allowEditAccess(sNo){
-  const r = requests.find(x=>x.s_no===sNo);
+async function allowEditAccess(uid){
+  const r = requests.find(x=>x.uid===uid);
   r.edit_allowed = true;
   r.edit_requested = false;
   await saveState();
@@ -1428,21 +1457,21 @@ async function allowEditAccess(sNo){
 }
 
 // ---------- Visit status (post-meeting) ----------
-async function updateVisitStatus(sNo, value){
-  const r = requests.find(x=>x.s_no===sNo);
+async function updateVisitStatus(uid, value){
+  const r = requests.find(x=>x.uid===uid);
   r.visit_status = value;
   await saveState();
   renderTable();
 }
 
 // ---------- Edit request modal ----------
-function openEditModal(sNo){
-  const r = requests.find(x=>x.s_no===sNo);
+function openEditModal(uid){
+  const r = requests.find(x=>x.uid===uid);
   const fullRights = isFullRights(currentUser.role);
   const locked = r.approval_status === 'Accepted' && !fullRights && !r.edit_allowed;
 
-  document.getElementById('editId').value = r.s_no;
-  document.getElementById('editModalSub').textContent = `#${String(r.s_no).padStart(3,'0')} — ${r.customer_name}`;
+  document.getElementById('editId').value = r.uid;
+  document.getElementById('editModalSub').textContent = `#${String(requestDisplayNumbers()[r.uid]||0).padStart(3,'0')} — ${r.customer_name}`;
   document.getElementById('editModalChip').innerHTML = approvalChip(r.approval_status);
   document.getElementById('edCustomer').value = r.customer_name;
   document.getElementById('edType').value = r.customer_type;
@@ -1467,8 +1496,8 @@ function openEditModal(sNo){
 
 async function submitEditRequest(e){
   e.preventDefault();
-  const sNo = parseInt(document.getElementById('editId').value,10);
-  const r = requests.find(x=>x.s_no===sNo);
+  const uid = document.getElementById('editId').value;
+  const r = requests.find(x=>x.uid===uid);
   const fullRights = isFullRights(currentUser.role);
   const locked = r.approval_status === 'Accepted' && !fullRights && !r.edit_allowed;
 
@@ -1484,9 +1513,9 @@ async function submitEditRequest(e){
     r.appointment_date = document.getElementById('edAppointment').value;
     r.appointment_time = document.getElementById('edApptTime').value;
     r.meeting_type = document.getElementById('edMeeting').value;
-    if (r.edit_allowed){ r.edit_allowed = false; } // one-time unlock consumed after this save
+    if (r.edit_allowed){ r.edit_allowed = false; }
   }
-  r.remarks = document.getElementById('edRemarks').value; // always editable
+  r.remarks = document.getElementById('edRemarks').value;
 
   closeModal('editModal');
   populateYearFilter();
@@ -1547,7 +1576,7 @@ async function submitExecForm(e){
   if (id){
     const ex = executives.find(x=>x.id===id);
     ex.name = name;
-    if (password) ex.password = password; // blank = keep existing password
+    if (password) ex.password = password;
   } else {
     executives.push({ id:'exec-'+(executives.length+1)+'-'+Date.now(), name, role:'sales_executive', password:password });
     populateExecLoginSelect();
@@ -1573,7 +1602,6 @@ async function deleteExecutive(id){
 }
 
 // ---------- Sales Funnel ----------
-// ---------- Machine Models (Manager / Assistant Manager maintain; Sales Executive selects) ----------
 function populateModelSelect(){
   const sel = document.getElementById('fnModel');
   if (!sel) return;
@@ -1633,14 +1661,11 @@ function populateFunnelYearFilter(){
 
 function populateFunnelExecSelect(){
   populateFunnelYearFilter();
-  // Filter dropdown (Manager / Assistant Manager only) — preserve current selection across refreshes.
   const fltSel = document.getElementById('fltFunnelExec');
   const prevFilterVal = fltSel.value || 'all';
   fltSel.innerHTML = `<option value="all">All executives</option>` + executives.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
   fltSel.value = executives.some(e=>e.id===prevFilterVal) ? prevFilterVal : 'all';
 
-  // Add/Edit modal dropdown (Manager / Assistant Manager only — a Sales
-  // Executive always logs entries against themselves).
   const fnSel = document.getElementById('fnExec');
   const prevFormVal = fnSel.value;
   fnSel.innerHTML = executives.map(e => `<option value="${e.id}">${e.name}</option>`).join('');
@@ -1684,12 +1709,24 @@ function getVisibleFunnels(){
     if (status !== 'all' && f.status !== status) return false;
     if (search && !(f.customer_name.toLowerCase().includes(search) || f.contact_person.toLowerCase().includes(search) || f.location.toLowerCase().includes(search))) return false;
     return true;
-  }).sort((a,b) => a.s_no - b.s_no);
+  });
+}
+
+// BUG FIX (Sr. No skipping/overlapping): previously every funnel entry
+// shared one global counter, so one executive's Sr. No would skip numbers
+// taken by other executives' entries. This computes a Sr. No that is
+// always sequential 1, 2, 3... within each executive's own entries only.
+function funnelDisplayNumbers(){
+  const counters = {};
+  const map = {};
+  funnels.forEach(f => {
+    counters[f.sales_executive_id] = (counters[f.sales_executive_id] || 0) + 1;
+    map[f.uid] = counters[f.sales_executive_id];
+  });
+  return map;
 }
 
 function funnelStatusChip(status){
-  // Won = revenue booked (accepted-style green); Cancelled = lost (red);
-  // Hold = amber; Closed = neutral/slate; Pending = default blue.
   const cls = status==='Won' ? 'chip-accepted'
     : status==='Cancelled' ? 'chip-lost'
     : status==='Hold' ? 'chip-hold'
@@ -1713,6 +1750,7 @@ function renderFunnelTable(){
   const rows = getVisibleFunnels();
   const tbody = document.getElementById('funnelBody');
   const fullRights = isFullRights(currentUser.role);
+  const displayMap = funnelDisplayNumbers();
 
   if (rows.length === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="12">No funnel entries match these filters.</td></tr>`;
@@ -1723,13 +1761,13 @@ function renderFunnelTable(){
     const isOwner = currentUser.role === 'sales_executive' && f.sales_executive_id === currentUser.id;
     let actions = '';
     if (fullRights || isOwner){
-      actions += `<button class="icon-btn" onclick="openFunnelModal(${f.s_no})">Edit</button>
-                  <button class="icon-btn decline" onclick="deleteFunnelEntry(${f.s_no})">Delete</button>`;
+      actions += `<button class="icon-btn" onclick="openFunnelModal('${f.uid}')">Edit</button>
+                  <button class="icon-btn decline" onclick="deleteFunnelEntry('${f.uid}')">Delete</button>`;
     }
     const custCol = `<strong>${f.customer_name}</strong><div class="subline">${f.customer_type}${fullRights ? ' &middot; <em>'+execName(f.sales_executive_id)+'</em>' : ''}</div>`;
     const contactCol = `${f.contact_person}<div class="subline">${f.mobile_number}<br>${f.email_id}</div>`;
     return `<tr>
-      <td class="mono">${String(f.s_no).padStart(3,'0')}</td>
+      <td class="mono">${String(displayMap[f.uid]||0).padStart(3,'0')}</td>
       <td>${custCol}</td>
       <td>${f.location}</td>
       <td>${contactCol}</td>
@@ -1745,9 +1783,9 @@ function renderFunnelTable(){
   }).join('');
 }
 
-function openFunnelModal(sNo){
+function openFunnelModal(uid){
   const fullRights = isFullRights(currentUser.role);
-  if (!sNo && fullRights && executives.length === 0){
+  if (!uid && fullRights && executives.length === 0){
     alert('Add a Sales Executive first from the Sales Executives tab.');
     return;
   }
@@ -1755,13 +1793,13 @@ function openFunnelModal(sNo){
   document.getElementById('funnelForm').reset();
   document.getElementById('funnelFormError').classList.add('hidden');
   document.getElementById('fnExecField').classList.toggle('hidden', !fullRights);
-  document.getElementById('fnId').value = sNo || '';
+  document.getElementById('fnId').value = uid || '';
   populateModelSelect();
 
-  if (sNo){
-    const f = funnels.find(x=>x.s_no===sNo);
+  if (uid){
+    const f = funnels.find(x=>x.uid===uid);
     document.getElementById('funnelModalTitle').textContent = 'Edit Funnel Entry';
-    document.getElementById('funnelModalSub').textContent = `#${String(f.s_no).padStart(3,'0')} — ${f.customer_name}`;
+    document.getElementById('funnelModalSub').textContent = `#${String(funnelDisplayNumbers()[f.uid]||0).padStart(3,'0')} — ${f.customer_name}`;
     if (fullRights) document.getElementById('fnExec').value = f.sales_executive_id;
     document.getElementById('fnCustomer').value = f.customer_name;
     document.getElementById('fnLocation').value = f.location;
@@ -1787,7 +1825,7 @@ function openFunnelModal(sNo){
 async function submitFunnelForm(e){
   e.preventDefault();
   const fullRights = isFullRights(currentUser.role);
-  const sNo = parseInt(document.getElementById('fnId').value, 10) || null;
+  const uid = document.getElementById('fnId').value || null;
   const execId = fullRights ? document.getElementById('fnExec').value : currentUser.id;
 
   if (fullRights && !execId){
@@ -1815,13 +1853,13 @@ async function submitFunnelForm(e){
     remarks: document.getElementById('fnRemarks').value,
   };
 
-  if (sNo){
-    const f = funnels.find(x=>x.s_no===sNo);
+  if (uid){
+    const f = funnels.find(x=>x.uid===uid);
     Object.assign(f, entry);
     if (fullRights) f.sales_executive_id = execId;
   } else {
     funnels.push(Object.assign(
-      { s_no: nextFunnelSNo++, sales_executive_id: execId, created_date: new Date().toISOString().slice(0,10) },
+      { uid: genUid('fn'), sales_executive_id: execId, created_date: new Date().toISOString().slice(0,10) },
       entry
     ));
   }
@@ -1832,20 +1870,20 @@ async function submitFunnelForm(e){
   renderFunnelTable();
 }
 
-async function deleteFunnelEntry(sNo){
+async function deleteFunnelEntry(uid){
   if (!confirm('Delete this funnel entry? This cannot be undone.')) return;
-  funnels = funnels.filter(f => f.s_no !== sNo);
+  funnels = funnels.filter(f => f.uid !== uid);
   await saveState();
   populateFunnelYearFilter();
   renderFunnelTable();
 }
 
-// ---------- Funnel export (Manager and Sales Executive — a Sales Executive
-// only ever sees/exports their own funnel via getVisibleFunnels()) ----------
+// ---------- Funnel export ----------
 function exportFunnelCSV(){
   const rows = getVisibleFunnels();
+  const displayMap = funnelDisplayNumbers();
   const headers = ['S.No','Customer Name','Location','Contact Person','Mobile Number','Email ID','Customer Type','Business Head','Brand','Model','Qty','Value','Status','Expected Closure Month','Remarks','Sales Executive'];
-  const csvRows = rows.map(f => [f.s_no, f.customer_name, f.location, f.contact_person, f.mobile_number, f.email_id, f.customer_type, f.business_head, f.brand, f.model, f.qty, f.value, f.status, f.expected_closure_month, (f.remarks||'').replace(/"/g,'""'), execName(f.sales_executive_id)]
+  const csvRows = rows.map(f => [displayMap[f.uid]||0, f.customer_name, f.location, f.contact_person, f.mobile_number, f.email_id, f.customer_type, f.business_head, f.brand, f.model, f.qty, f.value, f.status, f.expected_closure_month, (f.remarks||'').replace(/"/g,'""'), execName(f.sales_executive_id)]
     .map(v => `"${v}"`).join(','));
   const csv = [headers.join(','), ...csvRows].join('\n');
   const blob = new Blob([csv], { type:'text/csv' });
@@ -1853,8 +1891,9 @@ function exportFunnelCSV(){
 }
 
 function exportFunnelExcel(){
+  const displayMap = funnelDisplayNumbers();
   const rows = getVisibleFunnels().map(f => ({
-    'S.No': f.s_no, 'Customer Name': f.customer_name, 'Location': f.location, 'Contact Person': f.contact_person,
+    'S.No': displayMap[f.uid]||0, 'Customer Name': f.customer_name, 'Location': f.location, 'Contact Person': f.contact_person,
     'Mobile Number': f.mobile_number, 'Email ID': f.email_id, 'Customer Type': f.customer_type,
     'Business Head': f.business_head, 'Brand': f.brand, 'Model': f.model, 'Qty': f.qty, 'Value (AED)': f.value,
     'Status': f.status, 'Expected Closure Month': f.expected_closure_month, 'Remarks': f.remarks,
@@ -1880,10 +1919,6 @@ async function importFunnelFile(file){
       const customerName = row['Customer Name'] || row['customer_name'];
       if (!customerName){ skipped++; return; }
 
-      // A Sales Executive's import always lands in their own funnel. A
-      // Manager/Assistant Manager's import can target any executive by
-      // matching the "Sales Executive" column to a name; unmatched or
-      // blank falls back to whoever is importing.
       let execId = currentUser.id;
       if (fullRights){
         const match = executives.find(e => e.name === String(row['Sales Executive']||'').trim());
@@ -1891,7 +1926,7 @@ async function importFunnelFile(file){
       }
 
       funnels.push({
-        s_no: nextFunnelSNo++,
+        uid: genUid('fn'),
         sales_executive_id: execId,
         customer_name: customerName,
         location: row['Location'] || '',
@@ -1931,9 +1966,6 @@ function defaultReviewWeek(){
   return {
     billing:{ commitment:{ora:0,contracts:0,consumables:0}, achievement:{ora:0,contracts:0,consumables:0} },
     machines:{ commitment:{a4:0,a3:0,plotters:0}, achievement:{a4:0,a3:0,plotters:0} },
-    // Collection is its own simple module: how much is currently outstanding
-    // (split by ageing), and against that, how much was committed and
-    // actually collected this week.
     collection:{ above45:0, below45:0, commitment:0, achievement:0 }
   };
 }
@@ -1946,33 +1978,28 @@ function getMonthReview(execId, ym){
   return month;
 }
 
-// Billing YTD Target/Achievement are entered directly by the Sales
-// Executive (or Manager/Assistant Manager) — a standalone figure per
-// executive per year, not derived from the monthly target/achievement data.
 function getYtdBilling(execId, year){
   if (!weeklyReviews[execId]) weeklyReviews[execId] = { months:{} };
   if (!weeklyReviews[execId].ytdBilling) weeklyReviews[execId].ytdBilling = {};
   if (!weeklyReviews[execId].ytdBilling[year]) weeklyReviews[execId].ytdBilling[year] = { target:0, achievement:0 };
   return weeklyReviews[execId].ytdBilling[year];
 }
-async function setYtdBilling(execId, year, field, value){
+function setYtdBilling(execId, year, field, value){
   const y = getYtdBilling(execId, year);
   y[field] = parseFloat(value) || 0;
-  await saveState();
+  scheduleDebouncedSave();
 }
 
-// Machine Sale YTD Target/Achievement — same pattern: entered directly per
-// executive per year, not derived from the monthly unit-sale data.
 function getYtdUnits(execId, year){
   if (!weeklyReviews[execId]) weeklyReviews[execId] = { months:{} };
   if (!weeklyReviews[execId].ytdUnits) weeklyReviews[execId].ytdUnits = {};
   if (!weeklyReviews[execId].ytdUnits[year]) weeklyReviews[execId].ytdUnits[year] = { target:0, achievement:0 };
   return weeklyReviews[execId].ytdUnits[year];
 }
-async function setYtdUnits(execId, year, field, value){
+function setYtdUnits(execId, year, field, value){
   const y = getYtdUnits(execId, year);
   y[field] = parseFloat(value) || 0;
-  await saveState();
+  scheduleDebouncedSave();
 }
 
 function populateReviewExecSelect(){
@@ -2036,8 +2063,6 @@ function renderReviewSummary(){
   }
   const ym = getReviewPeriod();
 
-  // Aggregate one or every executive's month into the same shape so both
-  // the individual and consolidated views can share the same card markup.
   const execIds = execId === 'all' ? executives.map(e=>e.id) : [execId];
   let billingTarget = 0, totalCommitment = 0, totalAchievement = 0, totalUnitSale = 0, totalCollection = 0;
   execIds.forEach(id => {
@@ -2073,10 +2098,6 @@ function renderReviewYtdSummary(){
   const fullRights = isFullRights(currentUser.role);
   const canEdit = fullRights || (currentUser.role==='sales_executive' && execId!=='all' && execId===currentUser.id);
 
-  // Billing YTD and Machine Sale YTD Target/Achievement are entered
-  // directly by the Sales Executive (or Manager/Assistant Manager) — a
-  // standalone figure per executive per year, not derived from the
-  // monthly target/achievement data entered elsewhere on this tab.
   let cardsHtml;
   if (execId === 'all'){
     let billingTarget = 0, billingAchieve = 0, unitTarget = 0, unitAchieve = 0;
@@ -2146,10 +2167,9 @@ function renderReviewTable(){
   const t = month.targets;
   const fullRights = isFullRights(currentUser.role);
   const isOwner = currentUser.role === 'sales_executive' && execId === currentUser.id;
-  // A Sales Executive can now enter their own targets, same as Manager / AM.
   const canEditTargets = fullRights || isOwner;
   const canEditActuals = fullRights || isOwner;
-  const w = reviewSelectedWeek; // for template brevity
+  const w = reviewSelectedWeek;
   const cols6 = 'grid-template-columns:150px repeat(6,minmax(100px,1fr));min-width:760px;';
   const cols4 = 'grid-template-columns:150px repeat(4,minmax(120px,1fr));min-width:600px;';
 
@@ -2269,22 +2289,22 @@ function renderReviewConsolidatedTable(wrap){
   `;
 }
 
-async function reviewSetTarget(execId, ym, section, field, value){
+function reviewSetTarget(execId, ym, section, field, value){
   const month = getMonthReview(execId, ym);
   month.targets[section][field] = parseFloat(value) || 0;
-  await saveState();
+  scheduleDebouncedSave();
   renderReviewSummary();
 }
-async function reviewSetWeekValue(execId, ym, week, section, subsection, field, value){
+function reviewSetWeekValue(execId, ym, week, section, subsection, field, value){
   const month = getMonthReview(execId, ym);
   month.weeks[week][section][subsection][field] = parseFloat(value) || 0;
-  await saveState();
+  scheduleDebouncedSave();
   renderReviewSummary();
 }
-async function reviewSetCollectionValue(execId, ym, week, field, value){
+function reviewSetCollectionValue(execId, ym, week, field, value){
   const month = getMonthReview(execId, ym);
   month.weeks[week].collection[field] = parseFloat(value) || 0;
-  await saveState();
+  scheduleDebouncedSave();
   renderReviewSummary();
 }
 
@@ -2455,7 +2475,7 @@ function renderDcrMiniDashboard(){
   if (!statGrid) return;
 
   const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 6); // last 7 days, inclusive of today
+  cutoff.setDate(cutoff.getDate() - 6);
   const cutoffStr = cutoff.toISOString().slice(0,10);
   const recent = dcrEntries.filter(d => d.date >= cutoffStr);
 
@@ -2686,7 +2706,6 @@ function renderDashboard(){
     <div class="stat-card"><div class="stat-label">Win Rate</div><div class="stat-num">${winRate}%</div><div class="stat-sub">of decided deals</div></div>
   `;
 
-  // By sales executive
   const byExec = executives.map(ex => {
     const own = funnels.filter(f=>f.sales_executive_id===ex.id);
     const open = own.filter(f=>openStatuses.includes(f.status)).reduce((s,f)=>s+Number(f.value||0),0);
@@ -2701,7 +2720,6 @@ function renderDashboard(){
       <div class="mono" style="text-align:right;">${formatCurrency(x.total)}</div>
     </div>`).join('') : `<p class="subline">No funnel entries yet.</p>`;
 
-  // By business head
   const byHead = FUNNEL_BUSINESS_HEADS.map(h => {
     const own = funnels.filter(f=>f.business_head===h);
     const total = own.reduce((s,f)=>s+Number(f.value||0),0);
@@ -2715,7 +2733,6 @@ function renderDashboard(){
       <div class="mono" style="text-align:right;">${formatCurrency(x.total)}</div>
     </div>`).join('') : `<p class="subline">No funnel entries yet.</p>`;
 
-  // Expected closures — this month and next, still open
   const now = new Date();
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   const nextMonthDate = new Date(now.getFullYear(), now.getMonth()+1, 1);
@@ -2740,8 +2757,9 @@ function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
 // ---------- Export ----------
 function exportCSV(){
   const rows = getVisibleRequests();
+  const displayMap = requestDisplayNumbers();
   const headers = ['S.No','Requested Date','Customer Name','Contact Name','Mobile Number','Email Address','Emirate','Location','Customer Type','Lead Type','Appointment Date','Appointment Time','Meeting Type','Approval Status','Visit Status','Remarks'];
-  const csvRows = rows.map(r => [r.s_no, r.requested_date, r.customer_name, r.contact_name, r.mobile_number, r.email_address, r.emirate, r.location, r.customer_type, r.lead_type, r.appointment_date, formatTime(r.appointment_time), r.meeting_type, r.approval_status, r.visit_status, (r.remarks||'').replace(/"/g,'""')]
+  const csvRows = rows.map(r => [displayMap[r.uid]||0, r.requested_date, r.customer_name, r.contact_name, r.mobile_number, r.email_address, r.emirate, r.location, r.customer_type, r.lead_type, r.appointment_date, formatTime(r.appointment_time), r.meeting_type, r.approval_status, r.visit_status, (r.remarks||'').replace(/"/g,'""')]
     .map(v => `"${v}"`).join(','));
   const csv = [headers.join(','), ...csvRows].join('\n');
   const blob = new Blob([csv], { type:'text/csv' });
@@ -2749,8 +2767,9 @@ function exportCSV(){
 }
 
 function exportExcel(){
+  const displayMap = requestDisplayNumbers();
   const rows = getVisibleRequests().map(r => ({
-    'S.No': r.s_no, 'Requested Date': r.requested_date, 'Customer Name': r.customer_name,
+    'S.No': displayMap[r.uid]||0, 'Requested Date': r.requested_date, 'Customer Name': r.customer_name,
     'Contact Name': r.contact_name, 'Mobile Number': r.mobile_number, 'Email Address': r.email_address,
     'Emirate': r.emirate, 'Location': r.location, 'Customer Type': r.customer_type, 'Lead Type': r.lead_type,
     'Appointment Date': r.appointment_date, 'Appointment Time': formatTime(r.appointment_time), 'Meeting Type': r.meeting_type,

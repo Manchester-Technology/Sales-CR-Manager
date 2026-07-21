@@ -319,6 +319,7 @@
     <div class="user-chip">
       <span id="userName" class="mono" style="font-size:13px;"></span>
       <span id="userRolePill" class="role-pill"></span>
+      <button class="btn btn-secondary hidden" id="notifyBtn" onclick="enableNotifications()" style="margin-bottom:0;padding:6px 12px;font-size:12.5px;">🔔 Enable Notifications</button>
       <button class="btn btn-secondary hidden" id="backupBtn" onclick="openBackupModal()" style="margin-bottom:0;padding:6px 12px;font-size:12.5px;">🕐 Backup & Restore</button>
       <button class="logout-btn" onclick="logout()">Log out</button>
     </div>
@@ -328,7 +329,7 @@
     <button class="tab hidden" id="tabFunnel" onclick="switchTab('funnel')">Sales Funnel</button>
     <button class="tab hidden" id="tabReview" onclick="switchTab('review')">Weekly Review</button>
     <button class="tab hidden" id="tabDcr" onclick="switchTab('dcr')">DCR</button>
-    <button class="tab active" id="tabRequests" onclick="switchTab('requests')">Visit Requests</button>
+    <button class="tab active" id="tabRequests" onclick="switchTab('requests')">Visit Requests <span id="requestsPendingBadge" class="hidden" style="background:#B42318;color:white;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;"></span></button>
     <button class="tab hidden" id="tabDashboard" onclick="switchTab('dashboard')">Dashboard</button>
     <button class="tab hidden" id="tabExecs" onclick="switchTab('execs')">Sales Executives</button>
   </div>
@@ -339,11 +340,11 @@
       <div class="card filter-bar">
         <div class="field">
           <label>Year</label>
-          <select id="fltYear" onchange="renderTable()"></select>
+          <select id="fltYear" onchange="requestsFilterChanged()"></select>
         </div>
         <div class="field">
           <label>Month</label>
-          <select id="fltMonth" onchange="renderTable()">
+          <select id="fltMonth" onchange="requestsFilterChanged()">
             <option value="all">All months</option>
             <option value="1">January</option><option value="2">February</option><option value="3">March</option>
             <option value="4">April</option><option value="5">May</option><option value="6">June</option>
@@ -353,7 +354,7 @@
         </div>
         <div class="field">
           <label>Emirate</label>
-          <select id="fltEmirate" onchange="renderTable()">
+          <select id="fltEmirate" onchange="requestsFilterChanged()">
             <option value="all">All emirates</option>
             <option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option>
             <option>Ajman</option><option>Umm al Quwain</option><option>Fujairah</option>
@@ -361,7 +362,7 @@
         </div>
         <div class="field">
           <label>Approval Status</label>
-          <select id="fltStatus" onchange="renderTable()">
+          <select id="fltStatus" onchange="requestsFilterChanged()">
             <option value="all">All statuses</option>
             <option>Pending Manager Approval</option>
             <option>Accepted</option><option>Declined</option>
@@ -369,13 +370,13 @@
         </div>
         <div class="field">
           <label>Visit Status</label>
-          <select id="fltVisit" onchange="renderTable()">
+          <select id="fltVisit" onchange="requestsFilterChanged()">
             <option value="all">All</option><option>Pending</option><option>Closed</option>
           </select>
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltSearch" placeholder="Customer, contact, location..." oninput="renderTable()">
+          <input type="text" id="fltSearch" placeholder="Customer, contact, location..." oninput="debouncedRenderTable()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
@@ -397,6 +398,7 @@
           <tbody id="requestsBody"></tbody>
         </table>
       </div>
+      <div class="pagination-bar" id="requestsPaginationBar"></div>
     </section>
 
     <!-- ===== Sales Executives tab (Assistant Manager / Manager) ===== -->
@@ -466,7 +468,7 @@
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="funnelFilterChanged()">
+          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="debouncedFunnelFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetFunnelFilters()">Reset</button>
@@ -565,7 +567,7 @@
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="dcrFilterChanged()">
+          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="debouncedDcrFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetDcrFilters()">Reset</button>
@@ -954,6 +956,24 @@ let nextDcrSNo = 1;
 let currentUser = null; // { id, name, email, role }
 let filters = { year:'all', month:'all', emirate:'all', status:'all', visit:'all', search:'' };
 
+// ---------- Search input debouncing ----------
+// The search boxes re-render their whole table on every change. That's
+// unnoticeable at today's data size, but typing a full word could trigger
+// several full re-renders in a row once there are hundreds of rows. These
+// wrap the render/filter calls so they only fire ~250ms after the person
+// stops typing, instead of on every single keystroke — the table still
+// updates almost instantly, it just doesn't rebuild mid-word.
+function debounce(fn, delay){
+  let timer = null;
+  return function(...args){
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+const debouncedRenderTable = debounce(() => requestsFilterChanged(), 250);
+const debouncedFunnelFilterChanged = debounce(() => funnelFilterChanged(), 250);
+const debouncedDcrFilterChanged = debounce(() => dcrFilterChanged(), 250);
+
 // ---------- Pagination (Sales Funnel & DCR) ----------
 // Default view ('recent') shows only the last 10 entries. "Show More"
 // switches to 'all' mode, which paginates the full filtered history 30
@@ -966,15 +986,21 @@ let funnelViewMode = 'recent'; // 'recent' | 'all'
 let funnelPage = 1;
 let dcrViewMode = 'recent'; // 'recent' | 'all'
 let dcrPage = 1;
+let requestsViewMode = 'recent'; // 'recent' | 'all'
+let requestsPage = 1;
 
 function funnelFilterChanged(){ funnelPage = 1; renderFunnelTable(); }
 function dcrFilterChanged(){ dcrPage = 1; renderDcrTable(); }
+function requestsFilterChanged(){ requestsPage = 1; renderTable(); }
 function showAllFunnels(){ funnelViewMode = 'all'; funnelPage = 1; renderFunnelTable(); }
 function showRecentFunnels(){ funnelViewMode = 'recent'; funnelPage = 1; renderFunnelTable(); }
 function goToFunnelPage(p){ funnelPage = p; renderFunnelTable(); }
 function showAllDcr(){ dcrViewMode = 'all'; dcrPage = 1; renderDcrTable(); }
 function showRecentDcr(){ dcrViewMode = 'recent'; dcrPage = 1; renderDcrTable(); }
 function goToDcrPage(p){ dcrPage = p; renderDcrTable(); }
+function showAllRequests(){ requestsViewMode = 'all'; requestsPage = 1; renderTable(); }
+function showRecentRequests(){ requestsViewMode = 'recent'; requestsPage = 1; renderTable(); }
+function goToRequestsPage(p){ requestsPage = p; renderTable(); }
 
 // Renders a "Show More" link (recent mode) or Prev/Next + page number
 // controls (all mode) into the given container id.
@@ -1141,6 +1167,80 @@ function refreshActiveTabView(){
   if (activeTab.id === 'tabDashboard') renderDashboard();
 }
 
+// ---------- Approval notifications ----------
+// Fully client-side: no email/SMS/WhatsApp service required. Two parts —
+// (1) a live count badge on the Visit Requests tab, updated any time that
+// tab renders, and (2) an actual OS-level notification (via the browser's
+// Notification API) fired only when a genuinely NEW request appears that
+// needs Manager/Assistant Manager approval, detected during the periodic
+// background sync. This only works while the browser tab is open (even
+// backgrounded/minimized is fine) — it can't wake up a fully closed
+// browser or phone the way a real push/SMS/WhatsApp/email service could.
+function updatePendingApprovalBadge(){
+  const badge = document.getElementById('requestsPendingBadge');
+  if (!badge) return;
+  if (!currentUser || !isFullRights(currentUser.role)){ badge.classList.add('hidden'); return; }
+  const count = requests.filter(r => r.approval_status === 'Pending Manager Approval').length;
+  if (count > 0){
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function updateNotificationButtonLabel(){
+  const btn = document.getElementById('notifyBtn');
+  if (!btn) return;
+  if (typeof Notification === 'undefined'){ btn.classList.add('hidden'); return; }
+  btn.textContent = Notification.permission === 'granted' ? '🔔 Notifications On' : '🔔 Enable Notifications';
+}
+
+function enableNotifications(){
+  if (typeof Notification === 'undefined'){
+    alert('Notifications are not supported in this browser.');
+    return;
+  }
+  if (Notification.permission === 'denied'){
+    alert("Notifications were previously blocked for this site. You'll need to allow them from your browser's site settings, then reload the page.");
+    return;
+  }
+  Notification.requestPermission().then(perm => {
+    updateNotificationButtonLabel();
+    if (perm === 'granted'){
+      new Notification('Notifications enabled', { body: 'You will get a notification here whenever a new Visit Request needs approval — as long as this tab stays open.' });
+    }
+  });
+}
+
+// Tracks which "needs approval" requests we've already accounted for, so we
+// only ever notify about genuinely new ones — null means "not seeded yet",
+// which happens right after login so pre-existing pending requests don't
+// trigger a notification the moment someone signs in.
+let seenPendingRequestUids = null;
+function checkForNewPendingApprovalsAndNotify(){
+  if (!currentUser || !isFullRights(currentUser.role)) return;
+  const pending = requests.filter(r => r.approval_status === 'Pending Manager Approval');
+  const pendingUids = new Set(pending.map(r => r.uid));
+
+  if (seenPendingRequestUids === null){
+    seenPendingRequestUids = pendingUids;
+    return;
+  }
+
+  const newOnes = pending.filter(r => !seenPendingRequestUids.has(r.uid));
+  seenPendingRequestUids = pendingUids;
+  if (newOnes.length === 0) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+  if (newOnes.length === 1){
+    const r = newOnes[0];
+    new Notification('New Visit Request needs approval', { body: `${r.customer_name} — submitted by ${execName(r.sales_executive_id)}` });
+  } else {
+    new Notification('New Visit Requests need approval', { body: `${newOnes.length} new requests are waiting for approval.` });
+  }
+}
+
 // ---------- Concurrency-safe merge helpers ----------
 // These let two people save at roughly the same time without one of them
 // silently wiping out what the other just wrote. Instead of always
@@ -1305,6 +1405,8 @@ async function saveState(options = {}){
         if (merged){
           applyStatePayloadLocally(payload);
           showSyncNotice('Synced with changes made by someone else on your team.');
+          updatePendingApprovalBadge();
+          checkForNewPendingApprovalsAndNotify();
           refreshActiveTabView();
         }
         lastLoadedStateJSON = JSON.stringify(payload);
@@ -1550,6 +1652,8 @@ async function syncState(){
     populateFunnelExecSelect();
     populateReviewExecSelect();
     populateDcrExecSelect();
+    updatePendingApprovalBadge();
+    checkForNewPendingApprovalsAndNotify();
     const activeTab = document.querySelector('.tab.active');
     if (activeTab && activeTab.id === 'tabRequests') renderTable();
     if (activeTab && activeTab.id === 'tabExecs') renderExecs();
@@ -1697,6 +1801,9 @@ function enterApp(){
   document.getElementById('funnelExportExcelBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
   document.getElementById('manageModelsBtn').classList.toggle('hidden', !fullRights);
   document.getElementById('backupBtn').classList.toggle('hidden', !fullRights);
+  document.getElementById('notifyBtn').classList.toggle('hidden', !fullRights);
+  updateNotificationButtonLabel();
+  checkForNewPendingApprovalsAndNotify(); // seed baseline only — no notification on login itself
   populateModelSelect();
   populateBrandSelect();
   populateFunnelBrandFilter();
@@ -1741,6 +1848,7 @@ function resetFilters(){
   document.getElementById('fltStatus').value = 'all';
   document.getElementById('fltVisit').value = 'all';
   document.getElementById('fltSearch').value = '';
+  requestsPage = 1;
   renderTable();
 }
 
@@ -1808,17 +1916,33 @@ function visitChip(r){
 }
 
 function renderTable(){
-  const rows = getVisibleRequests();
+  updatePendingApprovalBadge();
+  const filteredRows = getVisibleRequests(); // oldest -> newest (creation order)
   const tbody = document.getElementById('requestsBody');
   const displayMap = requestDisplayNumbers();
+  const fullRights = isFullRights(currentUser.role);
 
-  if (rows.length === 0){
+  const totalCount = filteredRows.length;
+  const newestFirst = [...filteredRows].reverse();
+
+  let displayRows, totalPages = 1;
+  if (requestsViewMode === 'recent'){
+    displayRows = newestFirst.slice(0, RECENT_ROW_COUNT);
+  } else {
+    totalPages = Math.max(1, Math.ceil(totalCount / PAGE_ROW_COUNT));
+    if (requestsPage > totalPages) requestsPage = totalPages;
+    if (requestsPage < 1) requestsPage = 1;
+    const start = (requestsPage - 1) * PAGE_ROW_COUNT;
+    displayRows = newestFirst.slice(start, start + PAGE_ROW_COUNT);
+  }
+
+  if (totalCount === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="11">No visit requests match these filters.</td></tr>`;
+    renderPaginationBar('requestsPaginationBar', 0, requestsViewMode, requestsPage, totalPages, 'showAllRequests', 'showRecentRequests', 'goToRequestsPage');
     return;
   }
 
-  tbody.innerHTML = rows.map(r => {
-    const fullRights = isFullRights(currentUser.role);
+  tbody.innerHTML = displayRows.map(r => {
     const isOwnerExec = currentUser.role === 'sales_executive' && r.sales_executive_id === currentUser.id;
     let actions = '';
 
@@ -1864,6 +1988,8 @@ function renderTable(){
       <td><div class="row-actions">${actions}</div></td>
     </tr>`;
   }).join('');
+
+  renderPaginationBar('requestsPaginationBar', totalCount, requestsViewMode, requestsPage, totalPages, 'showAllRequests', 'showRecentRequests', 'goToRequestsPage');
 }
 
 // ---------- New request (executive) ----------

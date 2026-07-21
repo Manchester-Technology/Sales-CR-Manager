@@ -199,6 +199,13 @@
   <button onclick="document.getElementById('saveErrorBanner').classList.add('hidden')" style="margin-left:10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:3px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Dismiss</button>
 </div>
 
+<!-- Shown briefly when a save had to merge with changes someone else made in
+     the meantime, so it's never silently overwritten without the person
+     knowing. Auto-hides after a few seconds since it's informational. -->
+<div id="syncNoticeBanner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9998;background:#175CD3;color:white;font-family:'Inter',sans-serif;font-size:13.5px;padding:10px 16px;text-align:center;">
+  🔄 <span id="syncNoticeText"></span>
+</div>
+
 <!-- ============ LOADING SCREEN ============ -->
 <div id="loadingScreen" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#14213D;color:white;font-family:'Inter',sans-serif;font-size:14px;">
   Loading…
@@ -312,6 +319,7 @@
     <div class="user-chip">
       <span id="userName" class="mono" style="font-size:13px;"></span>
       <span id="userRolePill" class="role-pill"></span>
+      <button class="btn btn-secondary hidden" id="backupBtn" onclick="openBackupModal()" style="margin-bottom:0;padding:6px 12px;font-size:12.5px;">🕐 Backup & Restore</button>
       <button class="logout-btn" onclick="logout()">Log out</button>
     </div>
   </nav>
@@ -772,6 +780,28 @@
   </div>
 </div>
 
+<!-- ============ Backup & Restore Modal (Manager / Assistant Manager) ============ -->
+<div id="backupModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Backup & Restore</h3>
+    <p class="sub">Automatic backups are taken periodically as the app is used (at most once every 20 minutes). You can also grab a backup on demand, or restore any point below.</p>
+
+    <div class="modal-actions" style="justify-content:flex-start;gap:8px;margin-bottom:16px;">
+      <button type="button" class="btn btn-primary" onclick="downloadCurrentBackup()">⬇ Download Backup Now</button>
+      <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Restore from File
+        <input type="file" id="backupRestoreFileInput" accept=".json" style="display:none;" onchange="restoreFromFile(this.files[0])">
+      </label>
+    </div>
+
+    <h4 style="margin:6px 0 8px;font-size:14px;">Recent Automatic Backups</h4>
+    <div id="backupSnapshotsList" style="max-height:280px;overflow-y:auto;"></div>
+
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('backupModal')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- ============ New Visit Request Modal (Sales Executive) ============ -->
 <div id="newRequestModal" class="modal-overlay hidden">
   <div class="modal">
@@ -1089,25 +1119,361 @@ function showSaveError(message){
   banner.classList.remove('hidden');
 }
 
-async function saveState(){
+let syncNoticeTimer = null;
+function showSyncNotice(message){
+  const banner = document.getElementById('syncNoticeBanner');
+  const text = document.getElementById('syncNoticeText');
+  if (!banner || !text) return;
+  text.textContent = message;
+  banner.classList.remove('hidden');
+  clearTimeout(syncNoticeTimer);
+  syncNoticeTimer = setTimeout(() => banner.classList.add('hidden'), 6000);
+}
+
+function refreshActiveTabView(){
+  const activeTab = document.querySelector('.tab.active');
+  if (!activeTab) return;
+  if (activeTab.id === 'tabRequests') renderTable();
+  if (activeTab.id === 'tabExecs') renderExecs();
+  if (activeTab.id === 'tabFunnel') renderFunnelTable();
+  if (activeTab.id === 'tabReview') renderReviewTab();
+  if (activeTab.id === 'tabDcr') renderDcrTable();
+  if (activeTab.id === 'tabDashboard') renderDashboard();
+}
+
+// ---------- Concurrency-safe merge helpers ----------
+// These let two people save at roughly the same time without one of them
+// silently wiping out what the other just wrote. Instead of always
+// overwriting the whole row, a save first checks whether the row has
+// changed since it was last loaded; if so, it merges the specific pending
+// local changes onto the latest server data (record by record) rather than
+// discarding whichever save "loses".
+
+// Array collections (requests, funnels, dcrEntries, executives) keyed by a
+// stable id field: additions from either side are kept, our deletions are
+// honored, and an edit we made locally wins over an untouched server
+// record — a genuine same-record double-edit is the one narrow case where
+// one side's edit is overwritten, instead of everything since the last load.
+function mergeCollection(idKey, freshArr, baseArr, localArr){
+  freshArr = freshArr || []; baseArr = baseArr || []; localArr = localArr || [];
+  const baseById = new Map(baseArr.map(r => [String(r[idKey]), r]));
+  const localById = new Map(localArr.map(r => [String(r[idKey]), r]));
+  const result = [];
+  const seen = new Set();
+
+  freshArr.forEach(freshRec => {
+    const id = String(freshRec[idKey]);
+    seen.add(id);
+    const inBase = baseById.has(id);
+    const inLocal = localById.has(id);
+    if (!inBase && !inLocal){
+      result.push(freshRec); // someone else added this after our baseline
+    } else if (inBase && !inLocal){
+      // we deleted this locally since baseline -> honor the deletion
+    } else if (inLocal){
+      const localRec = localById.get(id);
+      const baseRec = baseById.get(id) || null;
+      const localChanged = JSON.stringify(localRec) !== JSON.stringify(baseRec);
+      result.push(localChanged ? localRec : freshRec);
+    }
+  });
+
+  localArr.forEach(localRec => {
+    const id = String(localRec[idKey]);
+    if (!seen.has(id) && !baseById.has(id)){
+      result.push(localRec); // our new record, not seen anywhere else yet
+      seen.add(id);
+    }
+  });
+
+  return result;
+}
+
+// Plain string lists (Model / Brand names): union of both sides' additions,
+// minus anything we deliberately removed locally.
+function mergeStringSet(freshArr, baseArr, localArr){
+  freshArr = freshArr || []; baseArr = baseArr || []; localArr = localArr || [];
+  const baseSet = new Set(baseArr);
+  const localSet = new Set(localArr);
+  let result = freshArr.filter(v => !(baseSet.has(v) && !localSet.has(v)));
+  localArr.forEach(v => {
+    if (!baseSet.has(v) && !result.includes(v)) result.push(v);
+  });
+  return result;
+}
+
+// Nested plain objects (manager/assistantManager accounts, weeklyReviews'
+// exec -> month -> week tree): recursively keeps our changed leaf values,
+// and takes the server's value for anything we didn't touch.
+function deepMergeByBaseline(fresh, baseline, local){
+  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+  if (isObj(fresh) || isObj(baseline) || isObj(local)){
+    const keys = new Set([
+      ...(isObj(fresh) ? Object.keys(fresh) : []),
+      ...(isObj(baseline) ? Object.keys(baseline) : []),
+      ...(isObj(local) ? Object.keys(local) : []),
+    ]);
+    const result = {};
+    keys.forEach(k => {
+      result[k] = deepMergeByBaseline(
+        isObj(fresh) ? fresh[k] : undefined,
+        isObj(baseline) ? baseline[k] : undefined,
+        isObj(local) ? local[k] : undefined
+      );
+    });
+    return result;
+  }
+  const localChanged = JSON.stringify(local === undefined ? null : local) !== JSON.stringify(baseline === undefined ? null : baseline);
+  return localChanged ? local : fresh;
+}
+
+function buildStatePayload(){
+  return { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, machineModels, machineBrands };
+}
+
+function applyStatePayloadLocally(payload){
+  manager = payload.manager; assistantManager = payload.assistantManager;
+  executives = payload.executives; requests = payload.requests; funnels = payload.funnels;
+  weeklyReviews = payload.weeklyReviews; dcrEntries = payload.dcrEntries; nextDcrSNo = payload.nextDcrSNo;
+  machineModels = payload.machineModels; machineBrands = payload.machineBrands;
+}
+
+// options.forceOverwrite skips the merge entirely and just writes local
+// state as-is — used by Restore Backup, where overwriting everything is
+// the whole point rather than something to merge around.
+async function saveState(options = {}){
   if (!supabaseClient){
     console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
     return;
   }
   saveInFlight++;
   try {
-    const payload = { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, machineModels, machineBrands };
-    const { error } = await supabaseClient
-      .from('app_state')
-      .upsert({ id: STATE_ROW_ID, value: payload, updated_at: new Date().toISOString() });
-    if (error) throw error;
-    lastLoadedStateJSON = JSON.stringify(payload);
+    const maxAttempts = 4;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++){
+      const { data: freshRow, error: freshErr } = await supabaseClient
+        .from('app_state')
+        .select('value, updated_at')
+        .eq('id', STATE_ROW_ID)
+        .maybeSingle();
+      if (freshErr) throw freshErr;
+
+      const freshValue = (freshRow && freshRow.value) ? freshRow.value : null;
+      const freshJSON = freshValue ? JSON.stringify(freshValue) : null;
+      let payload;
+      let merged = false;
+
+      if (options.forceOverwrite || !freshValue || freshJSON === lastLoadedStateJSON){
+        payload = buildStatePayload();
+      } else {
+        merged = true;
+        const baseline = lastLoadedStateJSON ? JSON.parse(lastLoadedStateJSON) : {};
+        payload = {
+          manager: deepMergeByBaseline(freshValue.manager, baseline.manager, manager),
+          assistantManager: deepMergeByBaseline(freshValue.assistantManager, baseline.assistantManager, assistantManager),
+          executives: mergeCollection('id', freshValue.executives, baseline.executives, executives),
+          requests: mergeCollection('uid', freshValue.requests, baseline.requests, requests),
+          funnels: mergeCollection('uid', freshValue.funnels, baseline.funnels, funnels),
+          weeklyReviews: deepMergeByBaseline(freshValue.weeklyReviews, baseline.weeklyReviews, weeklyReviews),
+          dcrEntries: mergeCollection('s_no', freshValue.dcrEntries, baseline.dcrEntries, dcrEntries),
+          nextDcrSNo: Math.max(freshValue.nextDcrSNo || 1, nextDcrSNo || 1),
+          machineModels: mergeStringSet(freshValue.machineModels, baseline.machineModels, machineModels),
+          machineBrands: mergeStringSet(freshValue.machineBrands, baseline.machineBrands, machineBrands),
+        };
+      }
+
+      const nowIso = new Date().toISOString();
+      let result;
+      if (freshRow){
+        // Conditional write: only succeeds if no one else has written since
+        // we just read it a moment ago (compare-and-swap on updated_at).
+        result = await supabaseClient
+          .from('app_state')
+          .update({ value: payload, updated_at: nowIso })
+          .eq('id', STATE_ROW_ID)
+          .eq('updated_at', freshRow.updated_at)
+          .select();
+      } else {
+        result = await supabaseClient
+          .from('app_state')
+          .insert({ id: STATE_ROW_ID, value: payload, updated_at: nowIso })
+          .select();
+      }
+      if (result.error) throw result.error;
+
+      if (result.data && result.data.length > 0){
+        // Write succeeded uncontested.
+        if (merged){
+          applyStatePayloadLocally(payload);
+          showSyncNotice('Synced with changes made by someone else on your team.');
+          refreshActiveTabView();
+        }
+        lastLoadedStateJSON = JSON.stringify(payload);
+        scheduleAutoSnapshot();
+        return;
+      }
+      // Someone else wrote in the instant between our read and write —
+      // loop around and retry against their latest data.
+    }
+    throw new Error('Could not save — someone else is saving at the exact same time. Please try again.');
   } catch (err) {
     console.error('Failed to save state to Supabase:', err);
     showSaveError((err && err.message) ? err.message : String(err));
   } finally {
     saveInFlight--;
   }
+}
+
+// ---------- Backup & Restore ----------
+// Every successful save is a point a Manager might want to roll back to.
+// Rather than snapshotting on literally every save (expensive and mostly
+// redundant), we snapshot at most once every 20 minutes automatically, plus
+// let a Manager/Assistant Manager grab an on-demand backup or restore any
+// point in the recent history at any time.
+const AUTO_SNAPSHOT_MIN_GAP_MS = 20 * 60 * 1000;
+let lastSnapshotAt = 0;
+let snapshotWriteCount = 0;
+
+function scheduleAutoSnapshot(){
+  if (!supabaseClient) return;
+  const now = Date.now();
+  if (now - lastSnapshotAt < AUTO_SNAPSHOT_MIN_GAP_MS) return;
+  lastSnapshotAt = now;
+  // Fire-and-forget: a backup snapshot failing should never block or show
+  // an error on top of the person's actual save.
+  writeSnapshotNow().catch(err => console.error('Auto-snapshot failed:', err));
+}
+
+async function writeSnapshotNow(){
+  if (!supabaseClient) return;
+  const payload = buildStatePayload();
+  const { error } = await supabaseClient.from('app_state_history').insert({ value: payload });
+  if (error) throw error;
+  snapshotWriteCount++;
+  // Keep the history table from growing forever — prune occasionally
+  // rather than on every single snapshot.
+  if (snapshotWriteCount % 10 === 0){
+    supabaseClient
+      .from('app_state_history')
+      .delete()
+      .lt('created_at', new Date(Date.now() - 90*24*60*60*1000).toISOString())
+      .then(() => {}, err => console.error('Snapshot prune failed:', err));
+  }
+}
+
+function downloadJSON(data, filename){
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadCurrentBackup(){
+  const stamp = new Date().toISOString().replace(/[:.]/g,'-');
+  downloadJSON(buildStatePayload(), `sales-cr-manager-backup-${stamp}.json`);
+}
+
+async function openBackupModal(){
+  document.getElementById('backupModal').classList.remove('hidden');
+  document.getElementById('backupSnapshotsList').innerHTML = '<p class="subline">Loading recent backups…</p>';
+  try {
+    const { data, error } = await supabaseClient
+      .from('app_state_history')
+      .select('id, created_at')
+      .order('created_at', { ascending: false })
+      .limit(30);
+    if (error) throw error;
+    renderSnapshotsList(data || []);
+  } catch (err) {
+    document.getElementById('backupSnapshotsList').innerHTML =
+      `<p class="subline">Couldn't load backup history: ${(err && err.message) ? err.message : String(err)}</p>`;
+  }
+}
+
+function renderSnapshotsList(rows){
+  const wrap = document.getElementById('backupSnapshotsList');
+  if (rows.length === 0){
+    wrap.innerHTML = `<p class="subline">No automatic backups yet — they're taken periodically as the app is used (at most one every 20 minutes).</p>`;
+    return;
+  }
+  wrap.innerHTML = rows.map(r => {
+    const when = new Date(r.created_at).toLocaleString();
+    return `<div class="row-actions" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+      <span>${when}</span>
+      <div class="row-actions">
+        <button type="button" class="icon-btn" onclick="downloadSnapshot(${r.id})">Download</button>
+        <button type="button" class="icon-btn decline" onclick="restoreFromSnapshot(${r.id})">Restore</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function downloadSnapshot(id){
+  try {
+    const { data, error } = await supabaseClient.from('app_state_history').select('value, created_at').eq('id', id).maybeSingle();
+    if (error) throw error;
+    if (!data){ alert('That backup could not be found.'); return; }
+    const stamp = new Date(data.created_at).toISOString().replace(/[:.]/g,'-');
+    downloadJSON(data.value, `sales-cr-manager-backup-${stamp}.json`);
+  } catch (err) {
+    alert('Could not download that backup: ' + ((err && err.message) ? err.message : String(err)));
+  }
+}
+
+async function restoreFromSnapshot(id){
+  if (!confirm('This will REPLACE all current data (Visit Requests, Sales Funnel, Weekly Review, DCR, everything) with this backup. This cannot be undone unless you have another backup. Continue?')) return;
+  try {
+    const { data, error } = await supabaseClient.from('app_state_history').select('value').eq('id', id).maybeSingle();
+    if (error) throw error;
+    if (!data){ alert('That backup could not be found.'); return; }
+    await applyRestoredState(data.value);
+  } catch (err) {
+    alert('Could not restore that backup: ' + ((err && err.message) ? err.message : String(err)));
+  }
+}
+
+function restoreFromFile(file){
+  if (!file) return;
+  if (!confirm('This will REPLACE all current data (Visit Requests, Sales Funnel, Weekly Review, DCR, everything) with the contents of this file. This cannot be undone unless you have another backup. Continue?')){
+    document.getElementById('backupRestoreFileInput').value = '';
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = async () => {
+    try {
+      const parsed = JSON.parse(reader.result);
+      if (typeof parsed !== 'object' || parsed === null){ throw new Error('Not a valid backup file.'); }
+      await applyRestoredState(parsed);
+    } catch (err) {
+      alert('Could not read that file as a backup: ' + ((err && err.message) ? err.message : String(err)));
+    } finally {
+      document.getElementById('backupRestoreFileInput').value = '';
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function applyRestoredState(payload){
+  manager = payload.manager || manager;
+  assistantManager = payload.assistantManager || assistantManager;
+  executives = payload.executives || [];
+  requests = payload.requests || [];
+  funnels = payload.funnels || [];
+  weeklyReviews = payload.weeklyReviews || {};
+  dcrEntries = payload.dcrEntries || [];
+  nextDcrSNo = payload.nextDcrSNo || 1;
+  machineModels = payload.machineModels || [];
+  machineBrands = payload.machineBrands && payload.machineBrands.length ? payload.machineBrands : [...DEFAULT_MACHINE_BRANDS];
+  // A restore is a deliberate full overwrite, not something to merge with
+  // whatever else may have changed on the server in the meantime.
+  await saveState({ forceOverwrite: true });
+  closeModal('backupModal');
+  populateFunnelExecSelect(); populateReviewExecSelect(); populateDcrExecSelect();
+  populateModelSelect(); populateBrandSelect(); populateFunnelBrandFilter();
+  populateYearFilter(); populateFunnelYearFilter(); initReviewPeriodDefaults();
+  refreshActiveTabView();
+  alert('Backup restored.');
 }
 
 function isFullRights(role){ return role === 'manager' || role === 'assistant_manager'; }
@@ -1169,7 +1535,7 @@ async function syncState(){
   // while a debounced edit (e.g. Weekly Review) hasn't been written yet, or
   // while they currently have a field focused (typing in a search box, a
   // review cell, etc.) — background sync waits until they're done.
-  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal','modelsModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
+  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal','modelsModal','backupModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
   const activeTag = document.activeElement ? document.activeElement.tagName : '';
   const isEditingField = ['INPUT','TEXTAREA','SELECT'].includes(activeTag);
   if (modalOpen || saveInFlight > 0 || pendingLocalChanges || isEditingField) return;
@@ -1278,7 +1644,7 @@ async function resetAllData(){
   machineModels = [];
   machineBrands = [...DEFAULT_MACHINE_BRANDS];
   currentUser = null;
-  await saveState();
+  await saveState({ forceOverwrite: true });
   alert('All data has been erased. The app will now reload.');
   location.reload();
 }
@@ -1330,6 +1696,7 @@ function enterApp(){
   document.getElementById('dcrMiniDashboard').classList.toggle('hidden', !fullRights);
   document.getElementById('funnelExportExcelBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
   document.getElementById('manageModelsBtn').classList.toggle('hidden', !fullRights);
+  document.getElementById('backupBtn').classList.toggle('hidden', !fullRights);
   populateModelSelect();
   populateBrandSelect();
   populateFunnelBrandFilter();

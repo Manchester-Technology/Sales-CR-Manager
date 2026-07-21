@@ -320,7 +320,6 @@
       <span id="userName" class="mono" style="font-size:13px;"></span>
       <span id="userRolePill" class="role-pill"></span>
       <button class="btn btn-secondary hidden" id="notifyBtn" onclick="enableNotifications()" style="margin-bottom:0;padding:6px 12px;font-size:12.5px;">🔔 Enable Notifications</button>
-      <button class="btn btn-secondary hidden" id="backupBtn" onclick="openBackupModal()" style="margin-bottom:0;padding:6px 12px;font-size:12.5px;">🕐 Backup & Restore</button>
       <button class="logout-btn" onclick="logout()">Log out</button>
     </div>
   </nav>
@@ -778,28 +777,6 @@
 
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" onclick="closeModal('modelsModal')">Close</button>
-    </div>
-  </div>
-</div>
-
-<!-- ============ Backup & Restore Modal (Manager / Assistant Manager) ============ -->
-<div id="backupModal" class="modal-overlay hidden">
-  <div class="modal">
-    <h3>Backup & Restore</h3>
-    <p class="sub">Automatic backups are taken periodically as the app is used (at most once every 20 minutes). You can also grab a backup on demand, or restore any point below.</p>
-
-    <div class="modal-actions" style="justify-content:flex-start;gap:8px;margin-bottom:16px;">
-      <button type="button" class="btn btn-primary" onclick="downloadCurrentBackup()">⬇ Download Backup Now</button>
-      <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Restore from File
-        <input type="file" id="backupRestoreFileInput" accept=".json" style="display:none;" onchange="restoreFromFile(this.files[0])">
-      </label>
-    </div>
-
-    <h4 style="margin:6px 0 8px;font-size:14px;">Recent Automatic Backups</h4>
-    <div id="backupSnapshotsList" style="max-height:280px;overflow-y:auto;"></div>
-
-    <div class="modal-actions">
-      <button type="button" class="btn btn-secondary" onclick="closeModal('backupModal')">Close</button>
     </div>
   </div>
 </div>
@@ -1410,7 +1387,6 @@ async function saveState(options = {}){
           refreshActiveTabView();
         }
         lastLoadedStateJSON = JSON.stringify(payload);
-        scheduleAutoSnapshot();
         return;
       }
       // Someone else wrote in the instant between our read and write —
@@ -1425,158 +1401,6 @@ async function saveState(options = {}){
   }
 }
 
-// ---------- Backup & Restore ----------
-// Every successful save is a point a Manager might want to roll back to.
-// Rather than snapshotting on literally every save (expensive and mostly
-// redundant), we snapshot at most once every 20 minutes automatically, plus
-// let a Manager/Assistant Manager grab an on-demand backup or restore any
-// point in the recent history at any time.
-const AUTO_SNAPSHOT_MIN_GAP_MS = 20 * 60 * 1000;
-let lastSnapshotAt = 0;
-let snapshotWriteCount = 0;
-
-function scheduleAutoSnapshot(){
-  if (!supabaseClient) return;
-  const now = Date.now();
-  if (now - lastSnapshotAt < AUTO_SNAPSHOT_MIN_GAP_MS) return;
-  lastSnapshotAt = now;
-  // Fire-and-forget: a backup snapshot failing should never block or show
-  // an error on top of the person's actual save.
-  writeSnapshotNow().catch(err => console.error('Auto-snapshot failed:', err));
-}
-
-async function writeSnapshotNow(){
-  if (!supabaseClient) return;
-  const payload = buildStatePayload();
-  const { error } = await supabaseClient.from('app_state_history').insert({ value: payload });
-  if (error) throw error;
-  snapshotWriteCount++;
-  // Keep the history table from growing forever — prune occasionally
-  // rather than on every single snapshot.
-  if (snapshotWriteCount % 10 === 0){
-    supabaseClient
-      .from('app_state_history')
-      .delete()
-      .lt('created_at', new Date(Date.now() - 90*24*60*60*1000).toISOString())
-      .then(() => {}, err => console.error('Snapshot prune failed:', err));
-  }
-}
-
-function downloadJSON(data, filename){
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-function downloadCurrentBackup(){
-  const stamp = new Date().toISOString().replace(/[:.]/g,'-');
-  downloadJSON(buildStatePayload(), `sales-cr-manager-backup-${stamp}.json`);
-}
-
-async function openBackupModal(){
-  document.getElementById('backupModal').classList.remove('hidden');
-  document.getElementById('backupSnapshotsList').innerHTML = '<p class="subline">Loading recent backups…</p>';
-  try {
-    const { data, error } = await supabaseClient
-      .from('app_state_history')
-      .select('id, created_at')
-      .order('created_at', { ascending: false })
-      .limit(30);
-    if (error) throw error;
-    renderSnapshotsList(data || []);
-  } catch (err) {
-    document.getElementById('backupSnapshotsList').innerHTML =
-      `<p class="subline">Couldn't load backup history: ${(err && err.message) ? err.message : String(err)}</p>`;
-  }
-}
-
-function renderSnapshotsList(rows){
-  const wrap = document.getElementById('backupSnapshotsList');
-  if (rows.length === 0){
-    wrap.innerHTML = `<p class="subline">No automatic backups yet — they're taken periodically as the app is used (at most one every 20 minutes).</p>`;
-    return;
-  }
-  wrap.innerHTML = rows.map(r => {
-    const when = new Date(r.created_at).toLocaleString();
-    return `<div class="row-actions" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
-      <span>${when}</span>
-      <div class="row-actions">
-        <button type="button" class="icon-btn" onclick="downloadSnapshot(${r.id})">Download</button>
-        <button type="button" class="icon-btn decline" onclick="restoreFromSnapshot(${r.id})">Restore</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-async function downloadSnapshot(id){
-  try {
-    const { data, error } = await supabaseClient.from('app_state_history').select('value, created_at').eq('id', id).maybeSingle();
-    if (error) throw error;
-    if (!data){ alert('That backup could not be found.'); return; }
-    const stamp = new Date(data.created_at).toISOString().replace(/[:.]/g,'-');
-    downloadJSON(data.value, `sales-cr-manager-backup-${stamp}.json`);
-  } catch (err) {
-    alert('Could not download that backup: ' + ((err && err.message) ? err.message : String(err)));
-  }
-}
-
-async function restoreFromSnapshot(id){
-  if (!confirm('This will REPLACE all current data (Visit Requests, Sales Funnel, Weekly Review, DCR, everything) with this backup. This cannot be undone unless you have another backup. Continue?')) return;
-  try {
-    const { data, error } = await supabaseClient.from('app_state_history').select('value').eq('id', id).maybeSingle();
-    if (error) throw error;
-    if (!data){ alert('That backup could not be found.'); return; }
-    await applyRestoredState(data.value);
-  } catch (err) {
-    alert('Could not restore that backup: ' + ((err && err.message) ? err.message : String(err)));
-  }
-}
-
-function restoreFromFile(file){
-  if (!file) return;
-  if (!confirm('This will REPLACE all current data (Visit Requests, Sales Funnel, Weekly Review, DCR, everything) with the contents of this file. This cannot be undone unless you have another backup. Continue?')){
-    document.getElementById('backupRestoreFileInput').value = '';
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = async () => {
-    try {
-      const parsed = JSON.parse(reader.result);
-      if (typeof parsed !== 'object' || parsed === null){ throw new Error('Not a valid backup file.'); }
-      await applyRestoredState(parsed);
-    } catch (err) {
-      alert('Could not read that file as a backup: ' + ((err && err.message) ? err.message : String(err)));
-    } finally {
-      document.getElementById('backupRestoreFileInput').value = '';
-    }
-  };
-  reader.readAsText(file);
-}
-
-async function applyRestoredState(payload){
-  manager = payload.manager || manager;
-  assistantManager = payload.assistantManager || assistantManager;
-  executives = payload.executives || [];
-  requests = payload.requests || [];
-  funnels = payload.funnels || [];
-  weeklyReviews = payload.weeklyReviews || {};
-  dcrEntries = payload.dcrEntries || [];
-  nextDcrSNo = payload.nextDcrSNo || 1;
-  machineModels = payload.machineModels || [];
-  machineBrands = payload.machineBrands && payload.machineBrands.length ? payload.machineBrands : [...DEFAULT_MACHINE_BRANDS];
-  // A restore is a deliberate full overwrite, not something to merge with
-  // whatever else may have changed on the server in the meantime.
-  await saveState({ forceOverwrite: true });
-  closeModal('backupModal');
-  populateFunnelExecSelect(); populateReviewExecSelect(); populateDcrExecSelect();
-  populateModelSelect(); populateBrandSelect(); populateFunnelBrandFilter();
-  populateYearFilter(); populateFunnelYearFilter(); initReviewPeriodDefaults();
-  refreshActiveTabView();
-  alert('Backup restored.');
-}
 
 function isFullRights(role){ return role === 'manager' || role === 'assistant_manager'; }
 function roleLabel(role){ return role === 'manager' ? 'Manager' : role === 'assistant_manager' ? 'Assistant Manager' : 'Sales Executive'; }
@@ -1637,7 +1461,7 @@ async function syncState(){
   // while a debounced edit (e.g. Weekly Review) hasn't been written yet, or
   // while they currently have a field focused (typing in a search box, a
   // review cell, etc.) — background sync waits until they're done.
-  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal','modelsModal','backupModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
+  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal','modelsModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
   const activeTag = document.activeElement ? document.activeElement.tagName : '';
   const isEditingField = ['INPUT','TEXTAREA','SELECT'].includes(activeTag);
   if (modalOpen || saveInFlight > 0 || pendingLocalChanges || isEditingField) return;
@@ -1800,7 +1624,6 @@ function enterApp(){
   document.getElementById('dcrMiniDashboard').classList.toggle('hidden', !fullRights);
   document.getElementById('funnelExportExcelBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
   document.getElementById('manageModelsBtn').classList.toggle('hidden', !fullRights);
-  document.getElementById('backupBtn').classList.toggle('hidden', !fullRights);
   document.getElementById('notifyBtn').classList.toggle('hidden', !fullRights);
   updateNotificationButtonLabel();
   checkForNewPendingApprovalsAndNotify(); // seed baseline only — no notification on login itself

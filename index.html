@@ -97,6 +97,13 @@
 
   .filter-bar{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;}
   .filter-bar .field{margin-bottom:0;min-width:130px;}
+  .pagination-bar{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:12px 2px;}
+  .pagination-bar .pg-info{font-size:12.5px;color:var(--slate);}
+  .pagination-bar .pg-controls{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+  .pg-btn{background:white;border:1px solid var(--border);padding:6px 12px;border-radius:7px;font-size:12.5px;font-weight:600;color:var(--ink);}
+  .pg-btn:hover:not(:disabled){border-color:var(--amber);color:var(--amber-dark);}
+  .pg-btn:disabled{opacity:.45;cursor:not-allowed;}
+  .pg-btn.active{background:var(--ink);color:white;border-color:var(--ink);}
   .filter-actions{margin-left:auto;display:flex;gap:10px;flex-wrap:wrap;}
 
   table{width:100%;border-collapse:collapse;font-size:13px;}
@@ -364,7 +371,6 @@
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
-          <button class="btn btn-secondary" onclick="exportCSV()">Export CSV</button>
           <button class="btn btn-primary" onclick="exportExcel()">Export Excel</button>
           <button class="btn btn-secondary" onclick="forceSaveNow(this)">💾 Save Now</button>
           <button class="btn btn-primary hidden" id="newRequestBtn" onclick="openNewRequestModal()">+ New Visit Request</button>
@@ -407,15 +413,15 @@
       <div class="card filter-bar">
         <div class="field hidden" id="funnelExecFilterField">
           <label>Sales Executive</label>
-          <select id="fltFunnelExec" onchange="renderFunnelTable()"></select>
+          <select id="fltFunnelExec" onchange="funnelFilterChanged()"></select>
         </div>
         <div class="field">
           <label>Closure Year</label>
-          <select id="fltFunnelYear" onchange="renderFunnelTable()"></select>
+          <select id="fltFunnelYear" onchange="funnelFilterChanged()"></select>
         </div>
         <div class="field">
           <label>Closure Month</label>
-          <select id="fltFunnelMonth" onchange="renderFunnelTable()">
+          <select id="fltFunnelMonth" onchange="funnelFilterChanged()">
             <option value="all">All months</option>
             <option value="01">January</option><option value="02">February</option><option value="03">March</option>
             <option value="04">April</option><option value="05">May</option><option value="06">June</option>
@@ -425,13 +431,13 @@
         </div>
         <div class="field">
           <label>Customer Type</label>
-          <select id="fltFunnelType" onchange="renderFunnelTable()">
+          <select id="fltFunnelType" onchange="funnelFilterChanged()">
             <option value="all">All</option><option>New</option><option>Existing</option>
           </select>
         </div>
         <div class="field">
           <label>Business Head</label>
-          <select id="fltFunnelBusinessHead" onchange="renderFunnelTable()">
+          <select id="fltFunnelBusinessHead" onchange="funnelFilterChanged()">
             <option value="all">All</option>
             <option>ORS</option><option>Lease</option><option>Consumables</option><option>FSMA</option>
             <option>AMC</option><option>Spot</option><option>Mis.Spares</option>
@@ -439,31 +445,28 @@
         </div>
         <div class="field">
           <label>Brand</label>
-          <select id="fltFunnelBrand" onchange="renderFunnelTable()">
+          <select id="fltFunnelBrand" onchange="funnelFilterChanged()">
             <option value="all">All</option>
-            <option>Epson</option><option>Kyocera</option><option>Canon</option><option>Toshiba</option>
-            <option>Ricoh</option><option>HP</option><option>Others</option>
           </select>
         </div>
         <div class="field">
           <label>Status</label>
-          <select id="fltFunnelStatus" onchange="renderFunnelTable()">
+          <select id="fltFunnelStatus" onchange="funnelFilterChanged()">
             <option value="all">All statuses</option>
             <option>Won</option><option>Pending</option><option>Hold</option><option>Closed</option><option>Cancelled</option>
           </select>
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="renderFunnelTable()">
+          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="funnelFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetFunnelFilters()">Reset</button>
-          <button class="btn btn-secondary hidden" id="funnelExportCsvBtn" onclick="exportFunnelCSV()">Export CSV</button>
           <button class="btn btn-primary hidden" id="funnelExportExcelBtn" onclick="exportFunnelExcel()">Export Excel</button>
           <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
             <input type="file" id="funnelImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importFunnelFile(this.files[0])">
           </label>
-          <button class="btn btn-secondary hidden" id="manageModelsBtn" onclick="openModelsModal()">⚙ Manage Models</button>
+          <button class="btn btn-secondary hidden" id="manageModelsBtn" onclick="openModelsModal()">⚙ Manage Model/Brand</button>
           <button class="btn btn-secondary" onclick="forceSaveNow(this)">💾 Save Now</button>
           <button class="btn btn-primary" onclick="openFunnelModal()">+ Add Funnel Entry</button>
         </div>
@@ -481,6 +484,7 @@
           <tbody id="funnelBody"></tbody>
         </table>
       </div>
+      <div class="pagination-bar" id="funnelPaginationBar"></div>
     </section>
 
     <!-- ===== Weekly Review Meeting tab (Sales Executive: own; Manager/Assistant Manager: full access) ===== -->
@@ -504,7 +508,6 @@
           <select id="reviewYearSelect" onchange="onReviewPeriodChange()"></select>
         </div>
         <div class="filter-actions">
-          <button class="btn btn-secondary" onclick="exportReviewCSV()">Export CSV</button>
           <button class="btn btn-secondary" onclick="exportReviewExcel()">Export Excel</button>
           <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
             <input type="file" id="reviewImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importReviewFile(this.files[0])">
@@ -537,28 +540,27 @@
       <div class="card filter-bar">
         <div class="field hidden" id="dcrExecFilterField">
           <label>Sales Executive</label>
-          <select id="fltDcrExec" onchange="renderDcrTable()"></select>
+          <select id="fltDcrExec" onchange="dcrFilterChanged()"></select>
         </div>
         <div class="field">
           <label>Call Type</label>
-          <select id="fltDcrCallType" onchange="renderDcrTable()">
+          <select id="fltDcrCallType" onchange="dcrFilterChanged()">
             <option value="all">All</option>
             <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
           </select>
         </div>
         <div class="field">
           <label>Mode</label>
-          <select id="fltDcrApproachedBy" onchange="renderDcrTable()">
+          <select id="fltDcrApproachedBy" onchange="dcrFilterChanged()">
             <option value="all">All</option><option>Call</option><option>Email</option><option>Direct visit</option>
           </select>
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="renderDcrTable()">
+          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="dcrFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetDcrFilters()">Reset</button>
-          <button class="btn btn-secondary" onclick="exportDcrCSV()">Export CSV</button>
           <button class="btn btn-secondary" onclick="exportDcrExcel()">Export Excel</button>
           <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
             <input type="file" id="dcrImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importDcrFile(this.files[0])">
@@ -579,6 +581,7 @@
           <tbody id="dcrBody"></tbody>
         </table>
       </div>
+      <div class="pagination-bar" id="dcrPaginationBar"></div>
     </section>
 
     <!-- ===== Dashboard tab (Manager / Assistant Manager only) ===== -->
@@ -602,8 +605,6 @@
         </table>
       </div>
     </section>
-
-    <p class="footnote">Prototype data lives in memory for this session only — everything resets on reload.</p>
   </main>
 </div>
 
@@ -707,10 +708,7 @@
           </select>
         </div>
         <div class="field"><label>Brand</label>
-          <select id="fnBrand">
-            <option>Epson</option><option>Kyocera</option><option>Canon</option><option>Toshiba</option>
-            <option>Ricoh</option><option>HP</option><option>Others</option>
-          </select>
+          <select id="fnBrand"></select>
         </div>
         <div class="field"><label>Model</label>
           <select id="fnModel"></select>
@@ -732,20 +730,42 @@
   </div>
 </div>
 
-<!-- ============ Manage Machine Models Modal (Manager / Assistant Manager) ============ -->
+<!-- ============ Manage Model/Brand Modal (Manager / Assistant Manager) ============ -->
 <div id="modelsModal" class="modal-overlay hidden">
   <div class="modal">
-    <h3>Manage Machine Models</h3>
-    <p class="sub">These models populate the Model dropdown on the Sales Funnel form for every Sales Executive.</p>
+    <h3>Manage Model/Brand</h3>
+    <p class="sub">These populate the Model and Brand dropdowns on the Sales Funnel form and filters for every Sales Executive.</p>
+
+    <h4 style="margin:6px 0 8px;font-size:14px;">Models</h4>
     <form onsubmit="addMachineModel(event)">
       <div class="form-grid">
         <div class="field full"><label>New Model Name</label><input id="newModelName" type="text" placeholder="e.g. Kyocera TASKalfa 2554ci"></div>
       </div>
-      <div class="modal-actions" style="justify-content:flex-start;margin-bottom:16px;">
+      <div class="modal-actions" style="justify-content:flex-start;margin-bottom:12px;gap:8px;">
         <button type="submit" class="btn btn-primary">+ Add Model</button>
+        <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
+          <input type="file" id="modelsImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importMachineModels(this.files[0])">
+        </label>
+        <button type="button" class="btn btn-secondary" onclick="exportMachineModels()">Export</button>
       </div>
     </form>
-    <div id="modelsListWrap" style="max-height:280px;overflow-y:auto;"></div>
+    <div id="modelsListWrap" style="max-height:180px;overflow-y:auto;margin-bottom:20px;"></div>
+
+    <h4 style="margin:6px 0 8px;font-size:14px;">Brands</h4>
+    <form onsubmit="addMachineBrand(event)">
+      <div class="form-grid">
+        <div class="field full"><label>New Brand Name</label><input id="newBrandName" type="text" placeholder="e.g. Xerox"></div>
+      </div>
+      <div class="modal-actions" style="justify-content:flex-start;margin-bottom:12px;gap:8px;">
+        <button type="submit" class="btn btn-primary">+ Add Brand</button>
+        <label class="btn btn-secondary" style="margin-bottom:0;cursor:pointer;">Import
+          <input type="file" id="brandsImportInput" accept=".csv,.xlsx,.xls" style="display:none;" onchange="importMachineBrands(this.files[0])">
+        </label>
+        <button type="button" class="btn btn-secondary" onclick="exportMachineBrands()">Export</button>
+      </div>
+    </form>
+    <div id="brandsListWrap" style="max-height:180px;overflow-y:auto;"></div>
+
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" onclick="closeModal('modelsModal')">Close</button>
     </div>
@@ -839,12 +859,26 @@
    ========================================================================== */
 
 // ---------- Supabase connection ----------
-const SUPABASE_URL = 'https://vxekwlvxhwhhkrithdum.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_WeXs5IyuRn5k-q5mK8iHBA_vkGUrp0l';
+const SUPABASE_URL = 'https://agppuqdlfrtceohkpose.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_Mr5JTjv99D57_ZtbjZZO_g_8UXas-wh';
 const supabaseClient = (SUPABASE_URL.startsWith('http'))
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
 const STATE_ROW_ID = 'app-state';
+
+// Every "Year" dropdown in the app should always start from 2026 (the
+// business's first year on this system) through at least next year, plus
+// any additional years actually present in the data (e.g. older imported
+// records). This keeps the dropdown populated and useful even before any
+// data has been entered, instead of being derived only from existing rows.
+const YEAR_FLOOR = 2026;
+function buildYearOptions(extraYears){
+  const currentYear = new Date().getFullYear();
+  const upper = Math.max(currentYear + 1, YEAR_FLOOR + 1);
+  const base = [];
+  for (let y = YEAR_FLOOR; y <= upper; y++) base.push(String(y));
+  return Array.from(new Set([...base, ...(extraYears || [])])).sort();
+}
 
 // ---------- Login screen sales quote ----------
 const SALES_QUOTES = [
@@ -875,7 +909,9 @@ let requests = [];
 let funnels = [];
 const FUNNEL_BUSINESS_HEADS = ['ORS','Lease','Consumables','FSMA','AMC','Spot','Mis.Spares'];
 
+const DEFAULT_MACHINE_BRANDS = ['Epson','Kyocera','Canon','Toshiba','Ricoh','HP','Others'];
 let machineModels = [];
+let machineBrands = [...DEFAULT_MACHINE_BRANDS];
 
 const REVIEW_WEEKS = ['Week 1','Week 2','Week 3','Week 4','Week 5'];
 let weeklyReviews = {};
@@ -887,6 +923,59 @@ let nextDcrSNo = 1;
 // ---------- Session state ----------
 let currentUser = null; // { id, name, email, role }
 let filters = { year:'all', month:'all', emirate:'all', status:'all', visit:'all', search:'' };
+
+// ---------- Pagination (Sales Funnel & DCR) ----------
+// Default view ('recent') shows only the last 10 entries. "Show More"
+// switches to 'all' mode, which paginates the full filtered history 30
+// rows at a time. Numbering (Sr. No / row order) is always computed over
+// the full filtered set *before* this slicing happens, so page 2 continues
+// on correctly from page 1 instead of restarting.
+const RECENT_ROW_COUNT = 10;
+const PAGE_ROW_COUNT = 30;
+let funnelViewMode = 'recent'; // 'recent' | 'all'
+let funnelPage = 1;
+let dcrViewMode = 'recent'; // 'recent' | 'all'
+let dcrPage = 1;
+
+function funnelFilterChanged(){ funnelPage = 1; renderFunnelTable(); }
+function dcrFilterChanged(){ dcrPage = 1; renderDcrTable(); }
+function showAllFunnels(){ funnelViewMode = 'all'; funnelPage = 1; renderFunnelTable(); }
+function showRecentFunnels(){ funnelViewMode = 'recent'; funnelPage = 1; renderFunnelTable(); }
+function goToFunnelPage(p){ funnelPage = p; renderFunnelTable(); }
+function showAllDcr(){ dcrViewMode = 'all'; dcrPage = 1; renderDcrTable(); }
+function showRecentDcr(){ dcrViewMode = 'recent'; dcrPage = 1; renderDcrTable(); }
+function goToDcrPage(p){ dcrPage = p; renderDcrTable(); }
+
+// Renders a "Show More" link (recent mode) or Prev/Next + page number
+// controls (all mode) into the given container id.
+function renderPaginationBar(containerId, totalCount, mode, page, totalPages, showAllFn, showRecentFn, goToPageFn){
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (totalCount === 0){ el.innerHTML = ''; return; }
+
+  if (mode === 'recent'){
+    if (totalCount <= RECENT_ROW_COUNT){ el.innerHTML = ''; return; }
+    el.innerHTML = `
+      <div class="pg-info">Showing latest ${Math.min(RECENT_ROW_COUNT, totalCount)} of ${totalCount}</div>
+      <div class="pg-controls"><button class="pg-btn" onclick="${showAllFn}()">Show More</button></div>`;
+    return;
+  }
+
+  const start = (page-1)*PAGE_ROW_COUNT + 1;
+  const end = Math.min(page*PAGE_ROW_COUNT, totalCount);
+  const pageBtns = [];
+  for (let p=1; p<=totalPages; p++){
+    pageBtns.push(`<button class="pg-btn ${p===page?'active':''}" onclick="${goToPageFn}(${p})">${p}</button>`);
+  }
+  el.innerHTML = `
+    <div class="pg-info">Showing ${start}&ndash;${end} of ${totalCount}</div>
+    <div class="pg-controls">
+      <button class="pg-btn" ${page<=1?'disabled':''} onclick="${goToPageFn}(${page-1})">&larr; Prev</button>
+      ${pageBtns.join('')}
+      <button class="pg-btn" ${page>=totalPages?'disabled':''} onclick="${goToPageFn}(${page+1})">Next &rarr;</button>
+      <button class="pg-btn" onclick="${showRecentFn}()">Show Less</button>
+    </div>`;
+}
 
 // ---------- Save / background-sync safety guards ----------
 // BUG FIX: previously, the 5-second background sync (syncState) could fire
@@ -948,10 +1037,16 @@ async function forceSaveNow(btn){
 }
 
 // ---------- Shared storage load/save ----------
+// lastLoadedStateJSON lets syncState() tell whether the data coming back
+// from Supabase is actually different from what's already on screen, so it
+// can skip reassigning arrays and re-rendering the active tab when nothing
+// changed — this is what was causing the whole table to flicker/rebuild
+// every 5 seconds even when no one else had made any edits.
+let lastLoadedStateJSON = null;
 async function loadState(){
   if (!supabaseClient){
     console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
-    return;
+    return true;
   }
   try {
     const { data, error } = await supabaseClient
@@ -961,6 +1056,9 @@ async function loadState(){
       .maybeSingle();
     if (error) throw error;
     if (data && data.value){
+      const json = JSON.stringify(data.value);
+      if (json === lastLoadedStateJSON) return false; // nothing changed since last load
+      lastLoadedStateJSON = json;
       const stateData = data.value;
       manager = stateData.manager || manager;
       assistantManager = stateData.assistantManager || assistantManager;
@@ -971,12 +1069,15 @@ async function loadState(){
       dcrEntries = stateData.dcrEntries || [];
       nextDcrSNo = stateData.nextDcrSNo || 1;
       machineModels = stateData.machineModels || [];
+      machineBrands = stateData.machineBrands || [...DEFAULT_MACHINE_BRANDS];
     }
     // No row yet (data is null) -> first run, keep the defaults above.
     migrateUids();
+    return true;
   } catch (err) {
     console.error('Failed to load state from Supabase:', err);
     showSaveError((err && err.message) ? err.message : String(err));
+    return true; // unsure what changed — safest to let the caller re-render
   }
 }
 
@@ -995,11 +1096,12 @@ async function saveState(){
   }
   saveInFlight++;
   try {
-    const payload = { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, machineModels };
+    const payload = { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, machineModels, machineBrands };
     const { error } = await supabaseClient
       .from('app_state')
       .upsert({ id: STATE_ROW_ID, value: payload, updated_at: new Date().toISOString() });
     if (error) throw error;
+    lastLoadedStateJSON = JSON.stringify(payload);
   } catch (err) {
     console.error('Failed to save state to Supabase:', err);
     showSaveError((err && err.message) ? err.message : String(err));
@@ -1064,10 +1166,15 @@ bootstrap();
 
 async function syncState(){
   // Don't yank data out from under someone mid-edit in a modal, mid-save,
-  // or while a debounced edit (e.g. Weekly Review) hasn't been written yet.
-  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
-  if (modalOpen || saveInFlight > 0 || pendingLocalChanges) return;
-  await loadState();
+  // while a debounced edit (e.g. Weekly Review) hasn't been written yet, or
+  // while they currently have a field focused (typing in a search box, a
+  // review cell, etc.) — background sync waits until they're done.
+  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal','modelsModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
+  const activeTag = document.activeElement ? document.activeElement.tagName : '';
+  const isEditingField = ['INPUT','TEXTAREA','SELECT'].includes(activeTag);
+  if (modalOpen || saveInFlight > 0 || pendingLocalChanges || isEditingField) return;
+  const changed = await loadState();
+  if (!changed) return; // nothing new on the server — skip the re-render entirely, no flicker
   if (!document.getElementById('loginScreen').classList.contains('hidden')){
     if (currentUser === null) refreshManagerFieldsView();
   }
@@ -1169,6 +1276,7 @@ async function resetAllData(){
   dcrEntries = [];
   nextDcrSNo = 1;
   machineModels = [];
+  machineBrands = [...DEFAULT_MACHINE_BRANDS];
   currentUser = null;
   await saveState();
   alert('All data has been erased. The app will now reload.');
@@ -1220,10 +1328,11 @@ function enterApp(){
   document.getElementById('reviewExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('dcrExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('dcrMiniDashboard').classList.toggle('hidden', !fullRights);
-  document.getElementById('funnelExportCsvBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
   document.getElementById('funnelExportExcelBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
   document.getElementById('manageModelsBtn').classList.toggle('hidden', !fullRights);
   populateModelSelect();
+  populateBrandSelect();
+  populateFunnelBrandFilter();
   populateFunnelExecSelect();
   initReviewPeriodDefaults();
   populateReviewExecSelect();
@@ -1251,9 +1360,12 @@ function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
 
 // ---------- Filters ----------
 function populateYearFilter(){
-  const years = Array.from(new Set(requests.map(r => r.appointment_date.slice(0,4)))).sort();
   const sel = document.getElementById('fltYear');
+  const prev = sel.value || 'all';
+  const dataYears = requests.map(r => r.appointment_date.slice(0,4));
+  const years = buildYearOptions(dataYears);
   sel.innerHTML = `<option value="all">All years</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  sel.value = years.includes(prev) ? prev : 'all';
 }
 function resetFilters(){
   document.getElementById('fltYear').value = 'all';
@@ -1612,9 +1724,29 @@ function populateModelSelect(){
   if (machineModels.includes(prev)) sel.value = prev;
 }
 
+function populateBrandSelect(){
+  const sel = document.getElementById('fnBrand');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = machineBrands.length
+    ? machineBrands.map(b => `<option value="${b}">${b}</option>`).join('')
+    : `<option value="">No brands yet — ask Manager to add one</option>`;
+  if (machineBrands.includes(prev)) sel.value = prev;
+}
+
+function populateFunnelBrandFilter(){
+  const sel = document.getElementById('fltFunnelBrand');
+  if (!sel) return;
+  const prev = sel.value || 'all';
+  sel.innerHTML = `<option value="all">All</option>` + machineBrands.map(b => `<option value="${b}">${b}</option>`).join('');
+  sel.value = machineBrands.includes(prev) ? prev : 'all';
+}
+
 function openModelsModal(){
   document.getElementById('newModelName').value = '';
+  document.getElementById('newBrandName').value = '';
   renderModelsList();
+  renderBrandsList();
   document.getElementById('modelsModal').classList.remove('hidden');
 }
 
@@ -1628,6 +1760,20 @@ function renderModelsList(){
     <div class="row-actions" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
       <span>${m}</span>
       <button type="button" class="icon-btn decline" onclick="deleteMachineModel(${i})">Delete</button>
+    </div>
+  `).join('');
+}
+
+function renderBrandsList(){
+  const wrap = document.getElementById('brandsListWrap');
+  if (machineBrands.length === 0){
+    wrap.innerHTML = `<p class="subline">No brands added yet.</p>`;
+    return;
+  }
+  wrap.innerHTML = machineBrands.map((b, i) => `
+    <div class="row-actions" style="justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border);">
+      <span>${b}</span>
+      <button type="button" class="icon-btn decline" onclick="deleteMachineBrand(${i})">Delete</button>
     </div>
   `).join('');
 }
@@ -1651,10 +1797,102 @@ async function deleteMachineModel(index){
   populateModelSelect();
 }
 
+async function addMachineBrand(e){
+  e.preventDefault();
+  const name = document.getElementById('newBrandName').value.trim();
+  if (!name) return;
+  if (!machineBrands.includes(name)) machineBrands.push(name);
+  document.getElementById('newBrandName').value = '';
+  await saveState();
+  renderBrandsList();
+  populateBrandSelect();
+  populateFunnelBrandFilter();
+}
+
+async function deleteMachineBrand(index){
+  if (!confirm('Remove this brand from the list?')) return;
+  machineBrands.splice(index, 1);
+  await saveState();
+  renderBrandsList();
+  populateBrandSelect();
+  populateFunnelBrandFilter();
+}
+
+// ---------- Model / Brand import & export ----------
+function exportMachineModels(){
+  const ws = XLSX.utils.json_to_sheet(machineModels.map(m => ({ 'Model Name': m })));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Models');
+  XLSX.writeFile(wb, 'machine-models.xlsx');
+}
+
+function exportMachineBrands(){
+  const ws = XLSX.utils.json_to_sheet(machineBrands.map(b => ({ 'Brand Name': b })));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Brands');
+  XLSX.writeFile(wb, 'machine-brands.xlsx');
+}
+
+async function importMachineModels(file){
+  if (!file) return;
+  pendingLocalChanges = true;
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    let imported = 0, skipped = 0;
+    rows.forEach(row => {
+      const name = String(row['Model Name'] || row['model_name'] || row['Model'] || row['Name'] || '').trim();
+      if (!name){ skipped++; return; }
+      if (!machineModels.includes(name)){ machineModels.push(name); imported++; } else { skipped++; }
+    });
+    await saveState();
+    pendingLocalChanges = false;
+    renderModelsList();
+    populateModelSelect();
+    document.getElementById('modelsImportInput').value = '';
+    alert(`Imported ${imported} model${imported===1?'':'s'}.${skipped ? ' Skipped '+skipped+' row(s) (blank or already in the list).' : ''}`);
+  } catch (err) {
+    pendingLocalChanges = false;
+    alert('Could not read that file. Please use a column named "Model Name".');
+    document.getElementById('modelsImportInput').value = '';
+  }
+}
+
+async function importMachineBrands(file){
+  if (!file) return;
+  pendingLocalChanges = true;
+  try {
+    const data = await file.arrayBuffer();
+    const wb = XLSX.read(data, { type: 'array' });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    let imported = 0, skipped = 0;
+    rows.forEach(row => {
+      const name = String(row['Brand Name'] || row['brand_name'] || row['Brand'] || row['Name'] || '').trim();
+      if (!name){ skipped++; return; }
+      if (!machineBrands.includes(name)){ machineBrands.push(name); imported++; } else { skipped++; }
+    });
+    await saveState();
+    pendingLocalChanges = false;
+    renderBrandsList();
+    populateBrandSelect();
+    populateFunnelBrandFilter();
+    document.getElementById('brandsImportInput').value = '';
+    alert(`Imported ${imported} brand${imported===1?'':'s'}.${skipped ? ' Skipped '+skipped+' row(s) (blank or already in the list).' : ''}`);
+  } catch (err) {
+    pendingLocalChanges = false;
+    alert('Could not read that file. Please use a column named "Brand Name".');
+    document.getElementById('brandsImportInput').value = '';
+  }
+}
+
 function populateFunnelYearFilter(){
   const sel = document.getElementById('fltFunnelYear');
   const prev = sel.value || 'all';
-  const years = Array.from(new Set(funnels.filter(f=>f.expected_closure_month).map(f => f.expected_closure_month.slice(0,4)))).sort();
+  const dataYears = funnels.filter(f=>f.expected_closure_month).map(f => f.expected_closure_month.slice(0,4));
+  const years = buildYearOptions(dataYears);
   sel.innerHTML = `<option value="all">All years</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join('');
   sel.value = years.includes(prev) ? prev : 'all';
 }
@@ -1681,6 +1919,7 @@ function resetFunnelFilters(){
   document.getElementById('fltFunnelBrand').value = 'all';
   document.getElementById('fltFunnelStatus').value = 'all';
   document.getElementById('fltFunnelSearch').value = '';
+  funnelPage = 1;
   renderFunnelTable();
 }
 
@@ -1712,17 +1951,16 @@ function getVisibleFunnels(){
   });
 }
 
-// BUG FIX (Sr. No skipping/overlapping): previously every funnel entry
-// shared one global counter, so one executive's Sr. No would skip numbers
-// taken by other executives' entries. This computes a Sr. No that is
-// always sequential 1, 2, 3... within each executive's own entries only.
+// Sr. No is sequential (1, 2, 3...) across whatever this viewer currently
+// sees, in creation order, computed before pagination is applied — no
+// per-executive reset. A Sales Executive only ever sees their own records
+// (getVisibleFunnels already scopes to that), so their funnel still reads
+// as a clean, gapless sequence. Manager / Assistant Manager see everyone's
+// records aggregated together, so they get one continuous sequential run
+// across all of it instead of numbers resetting for each executive.
 function funnelDisplayNumbers(){
-  const counters = {};
   const map = {};
-  funnels.forEach(f => {
-    counters[f.sales_executive_id] = (counters[f.sales_executive_id] || 0) + 1;
-    map[f.uid] = counters[f.sales_executive_id];
-  });
+  getVisibleFunnels().forEach((f, i) => { map[f.uid] = i + 1; });
   return map;
 }
 
@@ -1747,17 +1985,32 @@ function formatCurrency(v){
 }
 
 function renderFunnelTable(){
-  const rows = getVisibleFunnels();
+  const filteredRows = getVisibleFunnels(); // oldest -> newest (creation order)
   const tbody = document.getElementById('funnelBody');
   const fullRights = isFullRights(currentUser.role);
-  const displayMap = funnelDisplayNumbers();
+  const displayMap = funnelDisplayNumbers(); // Sr. No keyed by uid, based on the full filtered set
 
-  if (rows.length === 0){
+  const totalCount = filteredRows.length;
+  const newestFirst = [...filteredRows].reverse();
+
+  let displayRows, totalPages = 1;
+  if (funnelViewMode === 'recent'){
+    displayRows = newestFirst.slice(0, RECENT_ROW_COUNT);
+  } else {
+    totalPages = Math.max(1, Math.ceil(totalCount / PAGE_ROW_COUNT));
+    if (funnelPage > totalPages) funnelPage = totalPages;
+    if (funnelPage < 1) funnelPage = 1;
+    const start = (funnelPage - 1) * PAGE_ROW_COUNT;
+    displayRows = newestFirst.slice(start, start + PAGE_ROW_COUNT);
+  }
+
+  if (totalCount === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="12">No funnel entries match these filters.</td></tr>`;
+    renderPaginationBar('funnelPaginationBar', 0, funnelViewMode, funnelPage, totalPages, 'showAllFunnels', 'showRecentFunnels', 'goToFunnelPage');
     return;
   }
 
-  tbody.innerHTML = rows.map(f => {
+  tbody.innerHTML = displayRows.map(f => {
     const isOwner = currentUser.role === 'sales_executive' && f.sales_executive_id === currentUser.id;
     let actions = '';
     if (fullRights || isOwner){
@@ -1781,6 +2034,8 @@ function renderFunnelTable(){
       <td><div class="row-actions">${actions}</div></td>
     </tr>`;
   }).join('');
+
+  renderPaginationBar('funnelPaginationBar', totalCount, funnelViewMode, funnelPage, totalPages, 'showAllFunnels', 'showRecentFunnels', 'goToFunnelPage');
 }
 
 function openFunnelModal(uid){
@@ -1795,6 +2050,7 @@ function openFunnelModal(uid){
   document.getElementById('fnExecField').classList.toggle('hidden', !fullRights);
   document.getElementById('fnId').value = uid || '';
   populateModelSelect();
+  populateBrandSelect();
 
   if (uid){
     const f = funnels.find(x=>x.uid===uid);
@@ -1879,17 +2135,6 @@ async function deleteFunnelEntry(uid){
 }
 
 // ---------- Funnel export ----------
-function exportFunnelCSV(){
-  const rows = getVisibleFunnels();
-  const displayMap = funnelDisplayNumbers();
-  const headers = ['S.No','Customer Name','Location','Contact Person','Mobile Number','Email ID','Customer Type','Business Head','Brand','Model','Qty','Value','Status','Expected Closure Month','Remarks','Sales Executive'];
-  const csvRows = rows.map(f => [displayMap[f.uid]||0, f.customer_name, f.location, f.contact_person, f.mobile_number, f.email_id, f.customer_type, f.business_head, f.brand, f.model, f.qty, f.value, f.status, f.expected_closure_month, (f.remarks||'').replace(/"/g,'""'), execName(f.sales_executive_id)]
-    .map(v => `"${v}"`).join(','));
-  const csv = [headers.join(','), ...csvRows].join('\n');
-  const blob = new Blob([csv], { type:'text/csv' });
-  downloadBlob(blob, 'sales-funnel.csv');
-}
-
 function exportFunnelExcel(){
   const displayMap = funnelDisplayNumbers();
   const rows = getVisibleFunnels().map(f => ({
@@ -1908,6 +2153,7 @@ function exportFunnelExcel(){
 async function importFunnelFile(file){
   if (!file) return;
   const fullRights = isFullRights(currentUser.role);
+  pendingLocalChanges = true; // blocks background sync until this import is fully saved
   try {
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, { type: 'array' });
@@ -1948,11 +2194,13 @@ async function importFunnelFile(file){
     });
 
     await saveState();
+    pendingLocalChanges = false;
     populateFunnelYearFilter();
     renderFunnelTable();
     document.getElementById('funnelImportInput').value = '';
     alert(`Imported ${imported} funnel entr${imported===1?'y':'ies'}.${skipped ? ' Skipped '+skipped+' row(s) with no customer name.' : ''}`);
   } catch (err) {
+    pendingLocalChanges = false;
     alert('Could not read that file. Please use the exported CSV or Excel format.');
     document.getElementById('funnelImportInput').value = '';
   }
@@ -2016,10 +2264,10 @@ function initReviewPeriodDefaults(){
   const now = new Date();
   const month = String(now.getMonth()+1).padStart(2,'0');
   const yearSel = document.getElementById('reviewYearSelect');
-  const years = [now.getFullYear(), now.getFullYear()+1, now.getFullYear()+2];
+  const years = buildYearOptions([]);
   yearSel.innerHTML = years.map(y=>`<option value="${y}">${y}</option>`).join('');
   document.getElementById('reviewMonthSelect').value = month;
-  yearSel.value = String(now.getFullYear());
+  yearSel.value = years.includes(String(now.getFullYear())) ? String(now.getFullYear()) : years[0];
 }
 
 function getReviewExecId(){
@@ -2342,18 +2590,6 @@ function buildReviewExportRows(execId, ym){
   return rows;
 }
 
-function exportReviewCSV(){
-  const execId = getReviewExecId();
-  if (!execId || execId === 'all'){ alert('Select a single Sales Executive to export their Weekly Review.'); return; }
-  const ym = getReviewPeriod();
-  const rows = buildReviewExportRows(execId, ym);
-  const headers = Object.keys(rows[0]);
-  const csvRows = rows.map(r => headers.map(h => `"${r[h]}"`).join(','));
-  const csv = [headers.join(','), ...csvRows].join('\n');
-  const blob = new Blob([csv], { type:'text/csv' });
-  downloadBlob(blob, `weekly-review-${execName(execId).replace(/\s+/g,'-')}-${ym}.csv`);
-}
-
 function exportReviewExcel(){
   const execId = getReviewExecId();
   if (!execId || execId === 'all'){ alert('Select a single Sales Executive to export their Weekly Review.'); return; }
@@ -2373,6 +2609,7 @@ async function importReviewFile(file){
     document.getElementById('reviewImportInput').value = '';
     return;
   }
+  pendingLocalChanges = true; // blocks background sync until this import is fully saved
   try {
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, { type: 'array' });
@@ -2419,10 +2656,12 @@ async function importReviewFile(file){
     });
 
     await saveState();
+    pendingLocalChanges = false;
     renderReviewTab();
     document.getElementById('reviewImportInput').value = '';
     alert('Weekly review data imported for ' + execName(execId) + ', ' + ym + '.');
   } catch (err) {
+    pendingLocalChanges = false;
     alert('Could not read that file. Please use the exported CSV or Excel format.');
     document.getElementById('reviewImportInput').value = '';
   }
@@ -2446,6 +2685,7 @@ function resetDcrFilters(){
   document.getElementById('fltDcrCallType').value = 'all';
   document.getElementById('fltDcrApproachedBy').value = 'all';
   document.getElementById('fltDcrSearch').value = '';
+  dcrPage = 1;
   renderDcrTable();
 }
 
@@ -2505,15 +2745,28 @@ function renderDcrTable(){
   const fullRights = isFullRights(currentUser.role);
   if (fullRights) renderDcrMiniDashboard();
 
-  const rows = getVisibleDcr();
+  const filteredRows = getVisibleDcr(); // already sorted newest-first
   const tbody = document.getElementById('dcrBody');
+  const totalCount = filteredRows.length;
 
-  if (rows.length === 0){
+  let displayRows, totalPages = 1;
+  if (dcrViewMode === 'recent'){
+    displayRows = filteredRows.slice(0, RECENT_ROW_COUNT);
+  } else {
+    totalPages = Math.max(1, Math.ceil(totalCount / PAGE_ROW_COUNT));
+    if (dcrPage > totalPages) dcrPage = totalPages;
+    if (dcrPage < 1) dcrPage = 1;
+    const start = (dcrPage - 1) * PAGE_ROW_COUNT;
+    displayRows = filteredRows.slice(start, start + PAGE_ROW_COUNT);
+  }
+
+  if (totalCount === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="9">No daily activity entries match these filters.</td></tr>`;
+    renderPaginationBar('dcrPaginationBar', 0, dcrViewMode, dcrPage, totalPages, 'showAllDcr', 'showRecentDcr', 'goToDcrPage');
     return;
   }
 
-  tbody.innerHTML = rows.map(d => {
+  tbody.innerHTML = displayRows.map(d => {
     const isOwner = currentUser.role === 'sales_executive' && d.sales_executive_id === currentUser.id;
     let actions = '';
     if (fullRights || isOwner){
@@ -2535,6 +2788,8 @@ function renderDcrTable(){
       <td><div class="row-actions">${actions}</div></td>
     </tr>`;
   }).join('');
+
+  renderPaginationBar('dcrPaginationBar', totalCount, dcrViewMode, dcrPage, totalPages, 'showAllDcr', 'showRecentDcr', 'goToDcrPage');
 }
 
 function openDcrModal(sNo){
@@ -2620,16 +2875,6 @@ async function deleteDcrEntry(sNo){
 }
 
 // ---------- Daily Activity export / import ----------
-function exportDcrCSV(){
-  const rows = getVisibleDcr();
-  const headers = ['Date','Call Type','Customer Name','Contact Name','Designation','Contact Number','Contact Email','Location','Mode','Remarks','Sales Executive'];
-  const csvRows = rows.map(d => [d.date, d.call_type, d.customer_name, d.contact_name||'', d.designation||'', d.contact_number||'', d.contact_email||'', d.location, d.approached_by, (d.remarks||'').replace(/"/g,'""'), execName(d.sales_executive_id)]
-    .map(v => `"${v}"`).join(','));
-  const csv = [headers.join(','), ...csvRows].join('\n');
-  const blob = new Blob([csv], { type:'text/csv' });
-  downloadBlob(blob, 'daily-activity.csv');
-}
-
 function exportDcrExcel(){
   const rows = getVisibleDcr().map(d => ({
     'Date': d.date, 'Call Type': d.call_type, 'Customer Name': d.customer_name,
@@ -2647,6 +2892,7 @@ function exportDcrExcel(){
 async function importDcrFile(file){
   if (!file) return;
   const fullRights = isFullRights(currentUser.role);
+  pendingLocalChanges = true; // blocks background sync until this import is fully saved
   try {
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, { type: 'array' });
@@ -2678,10 +2924,12 @@ async function importDcrFile(file){
       imported++;
     });
     await saveState();
+    pendingLocalChanges = false;
     renderDcrTable();
     document.getElementById('dcrImportInput').value = '';
     alert(`Imported ${imported} activity entr${imported===1?'y':'ies'}.${skipped ? ' Skipped '+skipped+' row(s) with no customer name.' : ''}`);
   } catch (err) {
+    pendingLocalChanges = false;
     alert('Could not read that file. Please use the exported CSV or Excel format.');
     document.getElementById('dcrImportInput').value = '';
   }
@@ -2755,17 +3003,6 @@ function renderDashboard(){
 function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
 
 // ---------- Export ----------
-function exportCSV(){
-  const rows = getVisibleRequests();
-  const displayMap = requestDisplayNumbers();
-  const headers = ['S.No','Requested Date','Customer Name','Contact Name','Mobile Number','Email Address','Emirate','Location','Customer Type','Lead Type','Appointment Date','Appointment Time','Meeting Type','Approval Status','Visit Status','Remarks'];
-  const csvRows = rows.map(r => [displayMap[r.uid]||0, r.requested_date, r.customer_name, r.contact_name, r.mobile_number, r.email_address, r.emirate, r.location, r.customer_type, r.lead_type, r.appointment_date, formatTime(r.appointment_time), r.meeting_type, r.approval_status, r.visit_status, (r.remarks||'').replace(/"/g,'""')]
-    .map(v => `"${v}"`).join(','));
-  const csv = [headers.join(','), ...csvRows].join('\n');
-  const blob = new Blob([csv], { type:'text/csv' });
-  downloadBlob(blob, 'visit-requests.csv');
-}
-
 function exportExcel(){
   const displayMap = requestDisplayNumbers();
   const rows = getVisibleRequests().map(r => ({
@@ -2781,13 +3018,6 @@ function exportExcel(){
   XLSX.writeFile(wb, 'visit-requests.xlsx');
 }
 
-function downloadBlob(blob, filename){
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename;
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
 </script>
 </body>
 </html>

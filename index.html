@@ -542,9 +542,13 @@
     <!-- ===== Daily Activity / DCR tab (Sales Executive: own; Manager/Assistant Manager: full access) ===== -->
     <section id="panelDcr" class="hidden">
       <div class="card hidden" id="dcrMiniDashboard">
-        <div class="section-head"><h2>Last 7 Days Activity</h2></div>
+        <div class="section-head"><h2>Today's Activity</h2></div>
         <div class="stat-grid" id="dcrDashStatGrid"></div>
         <div id="dcrDashByExec"></div>
+      </div>
+      <div class="card hidden" id="dcrTelesaleCard">
+        <div class="section-head"><h2>Telesale — Today</h2></div>
+        <div class="stat-grid" id="dcrTelesaleStatGrid"></div>
       </div>
       <div class="card filter-bar">
         <div class="field hidden" id="dcrExecFilterField">
@@ -555,7 +559,7 @@
           <label>Call Type</label>
           <select id="fltDcrCallType" onchange="dcrFilterChanged()">
             <option value="all">All</option>
-            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
+            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option><option>Telesale</option>
           </select>
         </div>
         <div class="field">
@@ -838,20 +842,28 @@
         </div>
         <div class="field"><label>Date</label><input required id="dcrDate" type="date"></div>
         <div class="field"><label>Call Type</label>
-          <select id="dcrCallType">
-            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
+          <select id="dcrCallType" onchange="toggleDcrCallTypeFields()">
+            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option><option>Telesale</option>
           </select>
         </div>
-        <div class="field"><label>Customer Name</label><input required id="dcrCustomer" type="text"></div>
-        <div class="field"><label>Contact Name</label><input id="dcrContactName" type="text"></div>
-        <div class="field"><label>Designation</label><input id="dcrDesignation" type="text" placeholder="e.g. Procurement Manager"></div>
-        <div class="field"><label>Contact Number</label><input required id="dcrContactNumber" type="tel" placeholder="+971 5X XXX XXXX"></div>
-        <div class="field"><label>Contact Email</label><input id="dcrContactEmail" type="email"></div>
-        <div class="field"><label>Location</label><input required id="dcrLocation" type="text"></div>
-        <div class="field"><label>Mode</label>
-          <select id="dcrApproachedBy"><option>Call</option><option>Email</option><option>Direct visit</option></select>
+        <div id="dcrNormalFields" style="display:contents;">
+          <div class="field"><label>Customer Name</label><input id="dcrCustomer" type="text"></div>
+          <div class="field"><label>Contact Name</label><input id="dcrContactName" type="text"></div>
+          <div class="field"><label>Designation</label><input id="dcrDesignation" type="text" placeholder="e.g. Procurement Manager"></div>
+          <div class="field"><label>Contact Number</label><input id="dcrContactNumber" type="tel" placeholder="+971 5X XXX XXXX"></div>
+          <div class="field"><label>Contact Email</label><input id="dcrContactEmail" type="email"></div>
+          <div class="field"><label>Location</label><input id="dcrLocation" type="text"></div>
+          <div class="field"><label>Mode</label>
+            <select id="dcrApproachedBy"><option>Call</option><option>Email</option><option>Direct visit</option></select>
+          </div>
+          <div class="field full"><label>Remarks / Requirement</label><textarea id="dcrRemarks" placeholder="Notes or requirement gathered from this call"></textarea></div>
         </div>
-        <div class="field full"><label>Remarks / Requirement</label><textarea id="dcrRemarks" placeholder="Notes or requirement gathered from this call"></textarea></div>
+        <div id="dcrTelesaleFields" class="hidden" style="display:contents;">
+          <div class="field"><label>Total Cold Email Sent</label><input id="dcrColdEmail" type="number" min="0" step="1" value="0"></div>
+          <div class="field"><label>Total Cold Phone Call</label><input id="dcrColdCall" type="number" min="0" step="1" value="0"></div>
+          <div class="field"><label>Follow up Call</label><input id="dcrFollowupCall" type="number" min="0" step="1" value="0"></div>
+          <div class="field"><label>Follow up Email</label><input id="dcrFollowupEmail" type="number" min="0" step="1" value="0"></div>
+        </div>
       </div>
       <p id="dcrFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Please fill in all required fields.</p>
       <div class="modal-actions">
@@ -1622,6 +1634,7 @@ function enterApp(){
   document.getElementById('reviewExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('dcrExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('dcrMiniDashboard').classList.toggle('hidden', !fullRights);
+  document.getElementById('dcrTelesaleCard').classList.toggle('hidden', !fullRights);
   document.getElementById('funnelExportExcelBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
   document.getElementById('manageModelsBtn').classList.toggle('hidden', !fullRights);
   document.getElementById('notifyBtn').classList.toggle('hidden', !fullRights);
@@ -3028,25 +3041,51 @@ function getVisibleDcr(){
 function renderDcrMiniDashboard(){
   const statGrid = document.getElementById('dcrDashStatGrid');
   const byExecWrap = document.getElementById('dcrDashByExec');
+  const telesaleStatGrid = document.getElementById('dcrTelesaleStatGrid');
   if (!statGrid) return;
 
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 6);
-  const cutoffStr = cutoff.toISOString().slice(0,10);
-  const recent = dcrEntries.filter(d => d.date >= cutoffStr);
+  const todayStr = new Date().toISOString().slice(0,10);
+  const today = dcrEntries.filter(d => d.date === todayStr);
+  const nonTelesaleToday = today.filter(d => d.call_type !== 'Telesale');
+  const telesaleToday = today.filter(d => d.call_type === 'Telesale');
 
   const byMode = { 'Call':0, 'Email':0, 'Direct visit':0 };
-  recent.forEach(d => { if (byMode[d.approached_by] !== undefined) byMode[d.approached_by]++; });
+  nonTelesaleToday.forEach(d => { if (byMode[d.approached_by] !== undefined) byMode[d.approached_by]++; });
+
+  const telesaleTotals = telesaleToday.reduce((acc, d) => {
+    acc.coldEmail += Number(d.cold_email_sent||0);
+    acc.coldCall += Number(d.cold_phone_call||0);
+    acc.followupCall += Number(d.followup_call||0);
+    acc.followupEmail += Number(d.followup_email||0);
+    return acc;
+  }, { coldEmail:0, coldCall:0, followupCall:0, followupEmail:0 });
+  const telesaleUnitTotal = telesaleTotals.coldEmail + telesaleTotals.coldCall + telesaleTotals.followupCall + telesaleTotals.followupEmail;
+
+  const totalActivities = nonTelesaleToday.length + telesaleUnitTotal;
 
   statGrid.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Total Activities</div><div class="stat-num">${recent.length}</div><div class="stat-sub">Last 7 days</div></div>
-    <div class="stat-card"><div class="stat-label">Calls</div><div class="stat-num">${byMode['Call']}</div><div class="stat-sub">Last 7 days</div></div>
-    <div class="stat-card"><div class="stat-label">Direct Visits</div><div class="stat-num">${byMode['Direct visit']}</div><div class="stat-sub">Last 7 days</div></div>
-    <div class="stat-card"><div class="stat-label">Emails</div><div class="stat-num">${byMode['Email']}</div><div class="stat-sub">Last 7 days</div></div>
+    <div class="stat-card"><div class="stat-label">Total Activities</div><div class="stat-num">${totalActivities}</div><div class="stat-sub">Today</div></div>
+    <div class="stat-card"><div class="stat-label">Calls</div><div class="stat-num">${byMode['Call']}</div><div class="stat-sub">Today</div></div>
+    <div class="stat-card"><div class="stat-label">Direct Visits</div><div class="stat-num">${byMode['Direct visit']}</div><div class="stat-sub">Today</div></div>
+    <div class="stat-card"><div class="stat-label">Emails</div><div class="stat-num">${byMode['Email']}</div><div class="stat-sub">Today</div></div>
   `;
 
+  if (telesaleStatGrid){
+    telesaleStatGrid.innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Cold Email Sent</div><div class="stat-num">${telesaleTotals.coldEmail}</div><div class="stat-sub">Today</div></div>
+      <div class="stat-card"><div class="stat-label">Total Cold Phone Call</div><div class="stat-num">${telesaleTotals.coldCall}</div><div class="stat-sub">Today</div></div>
+      <div class="stat-card"><div class="stat-label">Follow up Call</div><div class="stat-num">${telesaleTotals.followupCall}</div><div class="stat-sub">Today</div></div>
+      <div class="stat-card"><div class="stat-label">Follow up Email</div><div class="stat-num">${telesaleTotals.followupEmail}</div><div class="stat-sub">Today</div></div>
+    `;
+  }
+
   const byExec = {};
-  recent.forEach(d => { byExec[d.sales_executive_id] = (byExec[d.sales_executive_id]||0) + 1; });
+  today.forEach(d => {
+    const units = d.call_type === 'Telesale'
+      ? Number(d.cold_email_sent||0) + Number(d.cold_phone_call||0) + Number(d.followup_call||0) + Number(d.followup_email||0)
+      : 1;
+    byExec[d.sales_executive_id] = (byExec[d.sales_executive_id]||0) + units;
+  });
   const byExecRows = Object.keys(byExec).map(id => ({ name: execName(id), count: byExec[id] })).sort((a,b)=>b.count-a.count);
   const maxCount = Math.max(1, ...byExecRows.map(x=>x.count));
   byExecWrap.innerHTML = byExecRows.length ? byExecRows.map(x => `
@@ -3054,7 +3093,7 @@ function renderDcrMiniDashboard(){
       <div>${x.name}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.round((x.count/maxCount)*100)}%"></div></div>
       <div class="mono" style="text-align:right;">${x.count}</div>
-    </div>`).join('') : `<p class="subline">No activity logged in the last 7 days.</p>`;
+    </div>`).join('') : `<p class="subline">No activity logged today.</p>`;
 }
 
 function renderDcrTable(){
@@ -3089,6 +3128,21 @@ function renderDcrTable(){
       actions += `<button class="icon-btn" onclick="openDcrModal(${d.s_no})">Edit</button>
                   <button class="icon-btn decline" onclick="deleteDcrEntry(${d.s_no})">Delete</button>`;
     }
+    if (d.call_type === 'Telesale'){
+      const execTag = fullRights ? '<div class="subline"><em>'+execName(d.sales_executive_id)+'</em></div>' : '';
+      const breakdown = `Cold Email Sent: <strong>${d.cold_email_sent||0}</strong> &middot; Cold Phone Call: <strong>${d.cold_phone_call||0}</strong> &middot; Follow up Call: <strong>${d.followup_call||0}</strong> &middot; Follow up Email: <strong>${d.followup_email||0}</strong>`;
+      return `<tr>
+        <td class="mono">${d.date}</td>
+        <td>${d.call_type}</td>
+        <td><strong>Telesale Summary</strong>${execTag}</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td style="max-width:280px;">${breakdown}</td>
+        <td><div class="row-actions">${actions}</div></td>
+      </tr>`;
+    }
     const custCol = `<strong>${d.customer_name}</strong>${fullRights ? '<div class="subline"><em>'+execName(d.sales_executive_id)+'</em></div>' : ''}`;
     const contactPersonCol = `${d.contact_name||''}${d.designation ? '<div class="subline">'+d.designation+'</div>' : ''}`;
     const contactCol = `${d.contact_number || ''}${d.contact_email ? '<div class="subline">'+d.contact_email+'</div>' : ''}`;
@@ -3106,6 +3160,16 @@ function renderDcrTable(){
   }).join('');
 
   renderPaginationBar('dcrPaginationBar', totalCount, dcrViewMode, dcrPage, totalPages, 'showAllDcr', 'showRecentDcr', 'goToDcrPage');
+}
+
+function toggleDcrCallTypeFields(){
+  const isTelesale = document.getElementById('dcrCallType').value === 'Telesale';
+  document.getElementById('dcrNormalFields').classList.toggle('hidden', isTelesale);
+  document.getElementById('dcrTelesaleFields').classList.toggle('hidden', !isTelesale);
+  // Only require customer-facing fields when this is not a Telesale summary entry
+  document.getElementById('dcrCustomer').required = !isTelesale;
+  document.getElementById('dcrContactNumber').required = !isTelesale;
+  document.getElementById('dcrLocation').required = !isTelesale;
 }
 
 function openDcrModal(sNo){
@@ -3135,11 +3199,16 @@ function openDcrModal(sNo){
     document.getElementById('dcrLocation').value = d.location;
     document.getElementById('dcrApproachedBy').value = d.approached_by;
     document.getElementById('dcrRemarks').value = d.remarks;
+    document.getElementById('dcrColdEmail').value = d.cold_email_sent || 0;
+    document.getElementById('dcrColdCall').value = d.cold_phone_call || 0;
+    document.getElementById('dcrFollowupCall').value = d.followup_call || 0;
+    document.getElementById('dcrFollowupEmail').value = d.followup_email || 0;
   } else {
     document.getElementById('dcrModalTitle').textContent = 'Add Daily Activity';
     document.getElementById('dcrModalSub').textContent = fullRights ? 'Pick which executive this call belongs to.' : '';
     document.getElementById('dcrDate').value = new Date().toISOString().slice(0,10);
   }
+  toggleDcrCallTypeFields();
   document.getElementById('dcrModal').classList.remove('hidden');
 }
 
@@ -3157,9 +3226,27 @@ async function submitDcrForm(e){
   }
   document.getElementById('dcrFormError').classList.add('hidden');
 
-  const entry = {
+  const callType = document.getElementById('dcrCallType').value;
+  const isTelesale = callType === 'Telesale';
+
+  const entry = isTelesale ? {
     date: document.getElementById('dcrDate').value,
-    call_type: document.getElementById('dcrCallType').value,
+    call_type: callType,
+    customer_name: 'Telesale Summary',
+    contact_name: '',
+    designation: '',
+    contact_number: '',
+    contact_email: '',
+    location: '',
+    approached_by: '',
+    remarks: '',
+    cold_email_sent: parseInt(document.getElementById('dcrColdEmail').value, 10) || 0,
+    cold_phone_call: parseInt(document.getElementById('dcrColdCall').value, 10) || 0,
+    followup_call: parseInt(document.getElementById('dcrFollowupCall').value, 10) || 0,
+    followup_email: parseInt(document.getElementById('dcrFollowupEmail').value, 10) || 0,
+  } : {
+    date: document.getElementById('dcrDate').value,
+    call_type: callType,
     customer_name: document.getElementById('dcrCustomer').value,
     contact_name: document.getElementById('dcrContactName').value,
     designation: document.getElementById('dcrDesignation').value,
@@ -3168,6 +3255,10 @@ async function submitDcrForm(e){
     location: document.getElementById('dcrLocation').value,
     approached_by: document.getElementById('dcrApproachedBy').value,
     remarks: document.getElementById('dcrRemarks').value,
+    cold_email_sent: 0,
+    cold_phone_call: 0,
+    followup_call: 0,
+    followup_email: 0,
   };
 
   if (sNo){
@@ -3197,6 +3288,8 @@ function exportDcrExcel(){
     'Contact Name': d.contact_name||'', 'Designation': d.designation||'',
     'Contact Number': d.contact_number||'', 'Contact Email': d.contact_email||'',
     'Location': d.location, 'Mode': d.approached_by, 'Remarks': d.remarks||'',
+    'Total Cold Email Sent': d.cold_email_sent||'', 'Total Cold Phone Call': d.cold_phone_call||'',
+    'Follow up Call': d.followup_call||'', 'Follow up Email': d.followup_email||'',
     'Sales Executive': execName(d.sales_executive_id)
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -3236,6 +3329,10 @@ async function importDcrFile(file){
         location: row['Location'] || '',
         approached_by: row['Mode'] || 'Call',
         remarks: row['Remarks'] || '',
+        cold_email_sent: parseInt(row['Total Cold Email Sent'], 10) || 0,
+        cold_phone_call: parseInt(row['Total Cold Phone Call'], 10) || 0,
+        followup_call: parseInt(row['Follow up Call'], 10) || 0,
+        followup_email: parseInt(row['Follow up Email'], 10) || 0,
       });
       imported++;
     });

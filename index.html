@@ -44,9 +44,9 @@
   }
   .logo-chip{background:#fff;border-radius:10px;display:inline-flex;align-items:center;padding:8px 14px;box-shadow:0 1px 2px rgba(0,0,0,0.08);}
   .logo-chip.nav-chip{padding:5px 11px;border-radius:8px;}
-  .logo-img-brand{height:52px;display:block;}
-  .logo-img-nav{height:30px;display:block;}
-  .logo-img-card{height:38px;display:block;}
+  .logo-img-brand{height:68px;display:block;}
+  .logo-img-nav{height:44px;display:block;}
+  .logo-img-card{height:48px;display:block;}
   .login-brand .top-label{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);font-weight:600;}
   .login-brand h1{font-size:38px;line-height:1.15;max-width:460px;margin:24px 0 12px;font-weight:600;}
   .login-brand p{color:#B9C2D6;max-width:420px;font-size:15px;line-height:1.6;}
@@ -162,6 +162,28 @@
 
   .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
   .section-head h2{font-size:18px;margin:0;}
+
+  /* ---------- Sales Executive mood emoji ---------- */
+  .mood-emoji{display:inline-block;font-size:15px;margin-left:4px;transform-origin:50% 60%;}
+  @keyframes moodZoom{
+    0%{ transform:scale(1); }
+    50%{ transform:scale(2); }
+    100%{ transform:scale(1); }
+  }
+  .mood-emoji.mood-zoom{animation:moodZoom .8s ease-in-out;}
+
+  /* ---------- Stress Buster (breathing circle) ---------- */
+  .breathing-circle{
+    width:110px;height:110px;border-radius:50%;margin:0 auto;
+    background:radial-gradient(circle at 35% 30%, #FDE9C8 0%, var(--amber) 60%, var(--amber-dark) 100%);
+    box-shadow:0 4px 18px rgba(217,143,43,0.35);
+    animation:breatheCycle 8s ease-in-out infinite;
+  }
+  @keyframes breatheCycle{
+    0%{ transform:scale(0.7); }
+    50%{ transform:scale(1.15); }
+    100%{ transform:scale(0.7); }
+  }
   .lock-note{font-size:12px;color:var(--slate);display:flex;align-items:center;gap:6px;margin-top:4px;}
 
   form .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
@@ -197,13 +219,6 @@
 <div id="saveErrorBanner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#B42318;color:white;font-family:'Inter',sans-serif;font-size:13.5px;padding:10px 16px;text-align:center;">
   ⚠️ Couldn't save to Supabase: <span id="saveErrorText" class="mono"></span>
   <button onclick="document.getElementById('saveErrorBanner').classList.add('hidden')" style="margin-left:10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:3px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Dismiss</button>
-</div>
-
-<!-- Shown briefly when a save had to merge with changes someone else made in
-     the meantime, so it's never silently overwritten without the person
-     knowing. Auto-hides after a few seconds since it's informational. -->
-<div id="syncNoticeBanner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9998;background:#175CD3;color:white;font-family:'Inter',sans-serif;font-size:13.5px;padding:10px 16px;text-align:center;">
-  🔄 <span id="syncNoticeText"></span>
 </div>
 
 <!-- ============ LOADING SCREEN ============ -->
@@ -318,32 +333,64 @@
     </div>
     <div class="user-chip">
       <span id="userName" class="mono" style="font-size:13px;"></span>
+      <span id="moodEmoji" class="mood-emoji hidden" aria-hidden="true">🙂</span>
       <span id="userRolePill" class="role-pill"></span>
-      <button class="btn btn-secondary hidden" id="notifyBtn" onclick="enableNotifications()" style="margin-bottom:0;padding:6px 12px;font-size:12.5px;">🔔 Enable Notifications</button>
       <button class="logout-btn" onclick="logout()">Log out</button>
     </div>
   </nav>
 
   <div class="tabstrip">
+    <button class="tab" id="tabUpdates" onclick="switchTab('updates')">Updates</button>
     <button class="tab hidden" id="tabFunnel" onclick="switchTab('funnel')">Sales Funnel</button>
     <button class="tab hidden" id="tabReview" onclick="switchTab('review')">Weekly Review</button>
     <button class="tab hidden" id="tabDcr" onclick="switchTab('dcr')">DCR</button>
-    <button class="tab active" id="tabRequests" onclick="switchTab('requests')">Visit Requests <span id="requestsPendingBadge" class="hidden" style="background:#B42318;color:white;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;"></span></button>
+    <button class="tab active" id="tabRequests" onclick="switchTab('requests')">Visit Requests</button>
     <button class="tab hidden" id="tabDashboard" onclick="switchTab('dashboard')">Dashboard</button>
     <button class="tab hidden" id="tabExecs" onclick="switchTab('execs')">Sales Executives</button>
   </div>
 
   <main>
+    <!-- ===== Updates / Broadcast tab (everyone can view; Manager / Assistant Manager can post) ===== -->
+    <section id="panelUpdates" class="hidden">
+      <div class="card hidden" id="updatesComposer">
+        <div class="section-head"><h2>Post an Update</h2></div>
+        <div class="field full">
+          <label>Message</label>
+          <textarea id="updateMessageInput" rows="3" placeholder="Share an update, announcement, or reminder with the sales team..."></textarea>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+          <button class="btn btn-primary" onclick="postBroadcast()">Post Update</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="section-head">
+          <h2>Updates</h2>
+          <button class="btn btn-secondary" onclick="forceSaveNow(this)">💾 Save Now</button>
+        </div>
+        <div id="updatesFeed"></div>
+      </div>
+      <div class="card hidden" id="stressBusterCard">
+        <div class="section-head">
+          <h2>Stress Buster</h2>
+        </div>
+        <div style="text-align:center;padding:8px 0;">
+          <div id="breathingCircle" class="breathing-circle"></div>
+          <p id="breathingLabel" style="margin-top:16px;font-weight:600;font-size:14.5px;color:var(--ink);">Breathe In</p>
+          <p class="subline" style="margin-top:4px;">A slow moment to reset — just follow the circle.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- ===== Requests tab ===== -->
     <section id="panelRequests">
       <div class="card filter-bar">
         <div class="field">
           <label>Year</label>
-          <select id="fltYear" onchange="requestsFilterChanged()"></select>
+          <select id="fltYear" onchange="renderTable()"></select>
         </div>
         <div class="field">
           <label>Month</label>
-          <select id="fltMonth" onchange="requestsFilterChanged()">
+          <select id="fltMonth" onchange="renderTable()">
             <option value="all">All months</option>
             <option value="1">January</option><option value="2">February</option><option value="3">March</option>
             <option value="4">April</option><option value="5">May</option><option value="6">June</option>
@@ -353,7 +400,7 @@
         </div>
         <div class="field">
           <label>Emirate</label>
-          <select id="fltEmirate" onchange="requestsFilterChanged()">
+          <select id="fltEmirate" onchange="renderTable()">
             <option value="all">All emirates</option>
             <option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option>
             <option>Ajman</option><option>Umm al Quwain</option><option>Fujairah</option>
@@ -361,7 +408,7 @@
         </div>
         <div class="field">
           <label>Approval Status</label>
-          <select id="fltStatus" onchange="requestsFilterChanged()">
+          <select id="fltStatus" onchange="renderTable()">
             <option value="all">All statuses</option>
             <option>Pending Manager Approval</option>
             <option>Accepted</option><option>Declined</option>
@@ -369,13 +416,13 @@
         </div>
         <div class="field">
           <label>Visit Status</label>
-          <select id="fltVisit" onchange="requestsFilterChanged()">
+          <select id="fltVisit" onchange="renderTable()">
             <option value="all">All</option><option>Pending</option><option>Closed</option>
           </select>
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltSearch" placeholder="Customer, contact, location..." oninput="debouncedRenderTable()">
+          <input type="text" id="fltSearch" placeholder="Customer, contact, location..." oninput="renderTable()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
@@ -397,7 +444,6 @@
           <tbody id="requestsBody"></tbody>
         </table>
       </div>
-      <div class="pagination-bar" id="requestsPaginationBar"></div>
     </section>
 
     <!-- ===== Sales Executives tab (Assistant Manager / Manager) ===== -->
@@ -467,7 +513,7 @@
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="debouncedFunnelFilterChanged()">
+          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="funnelFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetFunnelFilters()">Reset</button>
@@ -541,14 +587,11 @@
 
     <!-- ===== Daily Activity / DCR tab (Sales Executive: own; Manager/Assistant Manager: full access) ===== -->
     <section id="panelDcr" class="hidden">
+      <div class="section-head" style="margin-bottom:14px;"><h2>Daily Call Report</h2></div>
       <div class="card hidden" id="dcrMiniDashboard">
-        <div class="section-head"><h2>Today's Activity</h2></div>
+        <div class="section-head"><h2>Last 7 Days Activity</h2></div>
         <div class="stat-grid" id="dcrDashStatGrid"></div>
         <div id="dcrDashByExec"></div>
-      </div>
-      <div class="card hidden" id="dcrTelesaleCard">
-        <div class="section-head"><h2>Telesale — Today</h2></div>
-        <div class="stat-grid" id="dcrTelesaleStatGrid"></div>
       </div>
       <div class="card filter-bar">
         <div class="field hidden" id="dcrExecFilterField">
@@ -559,7 +602,7 @@
           <label>Call Type</label>
           <select id="fltDcrCallType" onchange="dcrFilterChanged()">
             <option value="all">All</option>
-            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option><option>Telesale</option>
+            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
           </select>
         </div>
         <div class="field">
@@ -570,7 +613,7 @@
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="debouncedDcrFilterChanged()">
+          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="dcrFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetDcrFilters()">Reset</button>
@@ -842,28 +885,20 @@
         </div>
         <div class="field"><label>Date</label><input required id="dcrDate" type="date"></div>
         <div class="field"><label>Call Type</label>
-          <select id="dcrCallType" onchange="toggleDcrCallTypeFields()">
-            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option><option>Telesale</option>
+          <select id="dcrCallType">
+            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
           </select>
         </div>
-        <div id="dcrNormalFields" style="display:contents;">
-          <div class="field"><label>Customer Name</label><input id="dcrCustomer" type="text"></div>
-          <div class="field"><label>Contact Name</label><input id="dcrContactName" type="text"></div>
-          <div class="field"><label>Designation</label><input id="dcrDesignation" type="text" placeholder="e.g. Procurement Manager"></div>
-          <div class="field"><label>Contact Number</label><input id="dcrContactNumber" type="tel" placeholder="+971 5X XXX XXXX"></div>
-          <div class="field"><label>Contact Email</label><input id="dcrContactEmail" type="email"></div>
-          <div class="field"><label>Location</label><input id="dcrLocation" type="text"></div>
-          <div class="field"><label>Mode</label>
-            <select id="dcrApproachedBy"><option>Call</option><option>Email</option><option>Direct visit</option></select>
-          </div>
-          <div class="field full"><label>Remarks / Requirement</label><textarea id="dcrRemarks" placeholder="Notes or requirement gathered from this call"></textarea></div>
+        <div class="field"><label>Customer Name</label><input required id="dcrCustomer" type="text"></div>
+        <div class="field"><label>Contact Name</label><input id="dcrContactName" type="text"></div>
+        <div class="field"><label>Designation</label><input id="dcrDesignation" type="text" placeholder="e.g. Procurement Manager"></div>
+        <div class="field"><label>Contact Number</label><input required id="dcrContactNumber" type="tel" placeholder="+971 5X XXX XXXX"></div>
+        <div class="field"><label>Contact Email</label><input id="dcrContactEmail" type="email"></div>
+        <div class="field"><label>Location</label><input required id="dcrLocation" type="text"></div>
+        <div class="field"><label>Mode</label>
+          <select id="dcrApproachedBy"><option>Call</option><option>Email</option><option>Direct visit</option></select>
         </div>
-        <div id="dcrTelesaleFields" class="hidden" style="display:contents;">
-          <div class="field"><label>Total Cold Email Sent</label><input id="dcrColdEmail" type="number" min="0" step="1" value="0"></div>
-          <div class="field"><label>Total Cold Phone Call</label><input id="dcrColdCall" type="number" min="0" step="1" value="0"></div>
-          <div class="field"><label>Follow up Call</label><input id="dcrFollowupCall" type="number" min="0" step="1" value="0"></div>
-          <div class="field"><label>Follow up Email</label><input id="dcrFollowupEmail" type="number" min="0" step="1" value="0"></div>
-        </div>
+        <div class="field full"><label>Remarks / Requirement</label><textarea id="dcrRemarks" placeholder="Notes or requirement gathered from this call"></textarea></div>
       </div>
       <p id="dcrFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Please fill in all required fields.</p>
       <div class="modal-actions">
@@ -941,27 +976,11 @@ let reviewSelectedWeek = 'Week 1';
 let dcrEntries = [];
 let nextDcrSNo = 1;
 
+let broadcasts = []; // { uid, message, postedById, postedByName, postedByRole, createdAt }
+
 // ---------- Session state ----------
 let currentUser = null; // { id, name, email, role }
 let filters = { year:'all', month:'all', emirate:'all', status:'all', visit:'all', search:'' };
-
-// ---------- Search input debouncing ----------
-// The search boxes re-render their whole table on every change. That's
-// unnoticeable at today's data size, but typing a full word could trigger
-// several full re-renders in a row once there are hundreds of rows. These
-// wrap the render/filter calls so they only fire ~250ms after the person
-// stops typing, instead of on every single keystroke — the table still
-// updates almost instantly, it just doesn't rebuild mid-word.
-function debounce(fn, delay){
-  let timer = null;
-  return function(...args){
-    clearTimeout(timer);
-    timer = setTimeout(() => fn.apply(this, args), delay);
-  };
-}
-const debouncedRenderTable = debounce(() => requestsFilterChanged(), 250);
-const debouncedFunnelFilterChanged = debounce(() => funnelFilterChanged(), 250);
-const debouncedDcrFilterChanged = debounce(() => dcrFilterChanged(), 250);
 
 // ---------- Pagination (Sales Funnel & DCR) ----------
 // Default view ('recent') shows only the last 10 entries. "Show More"
@@ -975,21 +994,15 @@ let funnelViewMode = 'recent'; // 'recent' | 'all'
 let funnelPage = 1;
 let dcrViewMode = 'recent'; // 'recent' | 'all'
 let dcrPage = 1;
-let requestsViewMode = 'recent'; // 'recent' | 'all'
-let requestsPage = 1;
 
 function funnelFilterChanged(){ funnelPage = 1; renderFunnelTable(); }
 function dcrFilterChanged(){ dcrPage = 1; renderDcrTable(); }
-function requestsFilterChanged(){ requestsPage = 1; renderTable(); }
 function showAllFunnels(){ funnelViewMode = 'all'; funnelPage = 1; renderFunnelTable(); }
 function showRecentFunnels(){ funnelViewMode = 'recent'; funnelPage = 1; renderFunnelTable(); }
 function goToFunnelPage(p){ funnelPage = p; renderFunnelTable(); }
 function showAllDcr(){ dcrViewMode = 'all'; dcrPage = 1; renderDcrTable(); }
 function showRecentDcr(){ dcrViewMode = 'recent'; dcrPage = 1; renderDcrTable(); }
 function goToDcrPage(p){ dcrPage = p; renderDcrTable(); }
-function showAllRequests(){ requestsViewMode = 'all'; requestsPage = 1; renderTable(); }
-function showRecentRequests(){ requestsViewMode = 'recent'; requestsPage = 1; renderTable(); }
-function goToRequestsPage(p){ requestsPage = p; renderTable(); }
 
 // Renders a "Show More" link (recent mode) or Prev/Next + page number
 // controls (all mode) into the given container id.
@@ -1115,6 +1128,7 @@ async function loadState(){
       nextDcrSNo = stateData.nextDcrSNo || 1;
       machineModels = stateData.machineModels || [];
       machineBrands = stateData.machineBrands || [...DEFAULT_MACHINE_BRANDS];
+      broadcasts = stateData.broadcasts || [];
     }
     // No row yet (data is null) -> first run, keep the defaults above.
     migrateUids();
@@ -1134,277 +1148,19 @@ function showSaveError(message){
   banner.classList.remove('hidden');
 }
 
-let syncNoticeTimer = null;
-function showSyncNotice(message){
-  const banner = document.getElementById('syncNoticeBanner');
-  const text = document.getElementById('syncNoticeText');
-  if (!banner || !text) return;
-  text.textContent = message;
-  banner.classList.remove('hidden');
-  clearTimeout(syncNoticeTimer);
-  syncNoticeTimer = setTimeout(() => banner.classList.add('hidden'), 6000);
-}
-
-function refreshActiveTabView(){
-  const activeTab = document.querySelector('.tab.active');
-  if (!activeTab) return;
-  if (activeTab.id === 'tabRequests') renderTable();
-  if (activeTab.id === 'tabExecs') renderExecs();
-  if (activeTab.id === 'tabFunnel') renderFunnelTable();
-  if (activeTab.id === 'tabReview') renderReviewTab();
-  if (activeTab.id === 'tabDcr') renderDcrTable();
-  if (activeTab.id === 'tabDashboard') renderDashboard();
-}
-
-// ---------- Approval notifications ----------
-// Fully client-side: no email/SMS/WhatsApp service required. Two parts —
-// (1) a live count badge on the Visit Requests tab, updated any time that
-// tab renders, and (2) an actual OS-level notification (via the browser's
-// Notification API) fired only when a genuinely NEW request appears that
-// needs Manager/Assistant Manager approval, detected during the periodic
-// background sync. This only works while the browser tab is open (even
-// backgrounded/minimized is fine) — it can't wake up a fully closed
-// browser or phone the way a real push/SMS/WhatsApp/email service could.
-function updatePendingApprovalBadge(){
-  const badge = document.getElementById('requestsPendingBadge');
-  if (!badge) return;
-  if (!currentUser || !isFullRights(currentUser.role)){ badge.classList.add('hidden'); return; }
-  const count = requests.filter(r => r.approval_status === 'Pending Manager Approval').length;
-  if (count > 0){
-    badge.textContent = count > 99 ? '99+' : String(count);
-    badge.classList.remove('hidden');
-  } else {
-    badge.classList.add('hidden');
-  }
-}
-
-function updateNotificationButtonLabel(){
-  const btn = document.getElementById('notifyBtn');
-  if (!btn) return;
-  if (typeof Notification === 'undefined'){ btn.classList.add('hidden'); return; }
-  btn.textContent = Notification.permission === 'granted' ? '🔔 Notifications On' : '🔔 Enable Notifications';
-}
-
-function enableNotifications(){
-  if (typeof Notification === 'undefined'){
-    alert('Notifications are not supported in this browser.');
-    return;
-  }
-  if (Notification.permission === 'denied'){
-    alert("Notifications were previously blocked for this site. You'll need to allow them from your browser's site settings, then reload the page.");
-    return;
-  }
-  Notification.requestPermission().then(perm => {
-    updateNotificationButtonLabel();
-    if (perm === 'granted'){
-      new Notification('Notifications enabled', { body: 'You will get a notification here whenever a new Visit Request needs approval — as long as this tab stays open.' });
-    }
-  });
-}
-
-// Tracks which "needs approval" requests we've already accounted for, so we
-// only ever notify about genuinely new ones — null means "not seeded yet",
-// which happens right after login so pre-existing pending requests don't
-// trigger a notification the moment someone signs in.
-let seenPendingRequestUids = null;
-function checkForNewPendingApprovalsAndNotify(){
-  if (!currentUser || !isFullRights(currentUser.role)) return;
-  const pending = requests.filter(r => r.approval_status === 'Pending Manager Approval');
-  const pendingUids = new Set(pending.map(r => r.uid));
-
-  if (seenPendingRequestUids === null){
-    seenPendingRequestUids = pendingUids;
-    return;
-  }
-
-  const newOnes = pending.filter(r => !seenPendingRequestUids.has(r.uid));
-  seenPendingRequestUids = pendingUids;
-  if (newOnes.length === 0) return;
-  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
-
-  if (newOnes.length === 1){
-    const r = newOnes[0];
-    new Notification('New Visit Request needs approval', { body: `${r.customer_name} — submitted by ${execName(r.sales_executive_id)}` });
-  } else {
-    new Notification('New Visit Requests need approval', { body: `${newOnes.length} new requests are waiting for approval.` });
-  }
-}
-
-// ---------- Concurrency-safe merge helpers ----------
-// These let two people save at roughly the same time without one of them
-// silently wiping out what the other just wrote. Instead of always
-// overwriting the whole row, a save first checks whether the row has
-// changed since it was last loaded; if so, it merges the specific pending
-// local changes onto the latest server data (record by record) rather than
-// discarding whichever save "loses".
-
-// Array collections (requests, funnels, dcrEntries, executives) keyed by a
-// stable id field: additions from either side are kept, our deletions are
-// honored, and an edit we made locally wins over an untouched server
-// record — a genuine same-record double-edit is the one narrow case where
-// one side's edit is overwritten, instead of everything since the last load.
-function mergeCollection(idKey, freshArr, baseArr, localArr){
-  freshArr = freshArr || []; baseArr = baseArr || []; localArr = localArr || [];
-  const baseById = new Map(baseArr.map(r => [String(r[idKey]), r]));
-  const localById = new Map(localArr.map(r => [String(r[idKey]), r]));
-  const result = [];
-  const seen = new Set();
-
-  freshArr.forEach(freshRec => {
-    const id = String(freshRec[idKey]);
-    seen.add(id);
-    const inBase = baseById.has(id);
-    const inLocal = localById.has(id);
-    if (!inBase && !inLocal){
-      result.push(freshRec); // someone else added this after our baseline
-    } else if (inBase && !inLocal){
-      // we deleted this locally since baseline -> honor the deletion
-    } else if (inLocal){
-      const localRec = localById.get(id);
-      const baseRec = baseById.get(id) || null;
-      const localChanged = JSON.stringify(localRec) !== JSON.stringify(baseRec);
-      result.push(localChanged ? localRec : freshRec);
-    }
-  });
-
-  localArr.forEach(localRec => {
-    const id = String(localRec[idKey]);
-    if (!seen.has(id) && !baseById.has(id)){
-      result.push(localRec); // our new record, not seen anywhere else yet
-      seen.add(id);
-    }
-  });
-
-  return result;
-}
-
-// Plain string lists (Model / Brand names): union of both sides' additions,
-// minus anything we deliberately removed locally.
-function mergeStringSet(freshArr, baseArr, localArr){
-  freshArr = freshArr || []; baseArr = baseArr || []; localArr = localArr || [];
-  const baseSet = new Set(baseArr);
-  const localSet = new Set(localArr);
-  let result = freshArr.filter(v => !(baseSet.has(v) && !localSet.has(v)));
-  localArr.forEach(v => {
-    if (!baseSet.has(v) && !result.includes(v)) result.push(v);
-  });
-  return result;
-}
-
-// Nested plain objects (manager/assistantManager accounts, weeklyReviews'
-// exec -> month -> week tree): recursively keeps our changed leaf values,
-// and takes the server's value for anything we didn't touch.
-function deepMergeByBaseline(fresh, baseline, local){
-  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
-  if (isObj(fresh) || isObj(baseline) || isObj(local)){
-    const keys = new Set([
-      ...(isObj(fresh) ? Object.keys(fresh) : []),
-      ...(isObj(baseline) ? Object.keys(baseline) : []),
-      ...(isObj(local) ? Object.keys(local) : []),
-    ]);
-    const result = {};
-    keys.forEach(k => {
-      result[k] = deepMergeByBaseline(
-        isObj(fresh) ? fresh[k] : undefined,
-        isObj(baseline) ? baseline[k] : undefined,
-        isObj(local) ? local[k] : undefined
-      );
-    });
-    return result;
-  }
-  const localChanged = JSON.stringify(local === undefined ? null : local) !== JSON.stringify(baseline === undefined ? null : baseline);
-  return localChanged ? local : fresh;
-}
-
-function buildStatePayload(){
-  return { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, machineModels, machineBrands };
-}
-
-function applyStatePayloadLocally(payload){
-  manager = payload.manager; assistantManager = payload.assistantManager;
-  executives = payload.executives; requests = payload.requests; funnels = payload.funnels;
-  weeklyReviews = payload.weeklyReviews; dcrEntries = payload.dcrEntries; nextDcrSNo = payload.nextDcrSNo;
-  machineModels = payload.machineModels; machineBrands = payload.machineBrands;
-}
-
-// options.forceOverwrite skips the merge entirely and just writes local
-// state as-is — used by Restore Backup, where overwriting everything is
-// the whole point rather than something to merge around.
-async function saveState(options = {}){
+async function saveState(){
   if (!supabaseClient){
     console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
     return;
   }
   saveInFlight++;
   try {
-    const maxAttempts = 4;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++){
-      const { data: freshRow, error: freshErr } = await supabaseClient
-        .from('app_state')
-        .select('value, updated_at')
-        .eq('id', STATE_ROW_ID)
-        .maybeSingle();
-      if (freshErr) throw freshErr;
-
-      const freshValue = (freshRow && freshRow.value) ? freshRow.value : null;
-      const freshJSON = freshValue ? JSON.stringify(freshValue) : null;
-      let payload;
-      let merged = false;
-
-      if (options.forceOverwrite || !freshValue || freshJSON === lastLoadedStateJSON){
-        payload = buildStatePayload();
-      } else {
-        merged = true;
-        const baseline = lastLoadedStateJSON ? JSON.parse(lastLoadedStateJSON) : {};
-        payload = {
-          manager: deepMergeByBaseline(freshValue.manager, baseline.manager, manager),
-          assistantManager: deepMergeByBaseline(freshValue.assistantManager, baseline.assistantManager, assistantManager),
-          executives: mergeCollection('id', freshValue.executives, baseline.executives, executives),
-          requests: mergeCollection('uid', freshValue.requests, baseline.requests, requests),
-          funnels: mergeCollection('uid', freshValue.funnels, baseline.funnels, funnels),
-          weeklyReviews: deepMergeByBaseline(freshValue.weeklyReviews, baseline.weeklyReviews, weeklyReviews),
-          dcrEntries: mergeCollection('s_no', freshValue.dcrEntries, baseline.dcrEntries, dcrEntries),
-          nextDcrSNo: Math.max(freshValue.nextDcrSNo || 1, nextDcrSNo || 1),
-          machineModels: mergeStringSet(freshValue.machineModels, baseline.machineModels, machineModels),
-          machineBrands: mergeStringSet(freshValue.machineBrands, baseline.machineBrands, machineBrands),
-        };
-      }
-
-      const nowIso = new Date().toISOString();
-      let result;
-      if (freshRow){
-        // Conditional write: only succeeds if no one else has written since
-        // we just read it a moment ago (compare-and-swap on updated_at).
-        result = await supabaseClient
-          .from('app_state')
-          .update({ value: payload, updated_at: nowIso })
-          .eq('id', STATE_ROW_ID)
-          .eq('updated_at', freshRow.updated_at)
-          .select();
-      } else {
-        result = await supabaseClient
-          .from('app_state')
-          .insert({ id: STATE_ROW_ID, value: payload, updated_at: nowIso })
-          .select();
-      }
-      if (result.error) throw result.error;
-
-      if (result.data && result.data.length > 0){
-        // Write succeeded uncontested.
-        if (merged){
-          applyStatePayloadLocally(payload);
-          showSyncNotice('Synced with changes made by someone else on your team.');
-          updatePendingApprovalBadge();
-          checkForNewPendingApprovalsAndNotify();
-          refreshActiveTabView();
-        }
-        lastLoadedStateJSON = JSON.stringify(payload);
-        return;
-      }
-      // Someone else wrote in the instant between our read and write —
-      // loop around and retry against their latest data.
-    }
-    throw new Error('Could not save — someone else is saving at the exact same time. Please try again.');
+    const payload = { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, machineModels, machineBrands, broadcasts };
+    const { error } = await supabaseClient
+      .from('app_state')
+      .upsert({ id: STATE_ROW_ID, value: payload, updated_at: new Date().toISOString() });
+    if (error) throw error;
+    lastLoadedStateJSON = JSON.stringify(payload);
   } catch (err) {
     console.error('Failed to save state to Supabase:', err);
     showSaveError((err && err.message) ? err.message : String(err));
@@ -1412,7 +1168,6 @@ async function saveState(options = {}){
     saveInFlight--;
   }
 }
-
 
 function isFullRights(role){ return role === 'manager' || role === 'assistant_manager'; }
 function roleLabel(role){ return role === 'manager' ? 'Manager' : role === 'assistant_manager' ? 'Assistant Manager' : 'Sales Executive'; }
@@ -1488,9 +1243,8 @@ async function syncState(){
     populateFunnelExecSelect();
     populateReviewExecSelect();
     populateDcrExecSelect();
-    updatePendingApprovalBadge();
-    checkForNewPendingApprovalsAndNotify();
     const activeTab = document.querySelector('.tab.active');
+    if (activeTab && activeTab.id === 'tabUpdates') renderUpdatesFeed();
     if (activeTab && activeTab.id === 'tabRequests') renderTable();
     if (activeTab && activeTab.id === 'tabExecs') renderExecs();
     if (activeTab && activeTab.id === 'tabFunnel') renderFunnelTable();
@@ -1583,8 +1337,9 @@ async function resetAllData(){
   nextDcrSNo = 1;
   machineModels = [];
   machineBrands = [...DEFAULT_MACHINE_BRANDS];
+  broadcasts = [];
   currentUser = null;
-  await saveState({ forceOverwrite: true });
+  await saveState();
   alert('All data has been erased. The app will now reload.');
   location.reload();
 }
@@ -1634,12 +1389,11 @@ function enterApp(){
   document.getElementById('reviewExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('dcrExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('dcrMiniDashboard').classList.toggle('hidden', !fullRights);
-  document.getElementById('dcrTelesaleCard').classList.toggle('hidden', !fullRights);
   document.getElementById('funnelExportExcelBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
   document.getElementById('manageModelsBtn').classList.toggle('hidden', !fullRights);
-  document.getElementById('notifyBtn').classList.toggle('hidden', !fullRights);
-  updateNotificationButtonLabel();
-  checkForNewPendingApprovalsAndNotify(); // seed baseline only — no notification on login itself
+  document.getElementById('updatesComposer').classList.toggle('hidden', !fullRights);
+  document.getElementById('moodEmoji').classList.toggle('hidden', currentUser.role !== 'sales_executive');
+  document.getElementById('stressBusterCard').classList.toggle('hidden', currentUser.role !== 'sales_executive');
   populateModelSelect();
   populateBrandSelect();
   populateFunnelBrandFilter();
@@ -1649,16 +1403,17 @@ function enterApp(){
   populateDcrExecSelect();
 
   populateYearFilter();
-  switchTab('requests');
+  switchTab(currentUser.role === 'sales_executive' ? 'updates' : 'requests');
 }
 
 // ---------- Tabs ----------
 function switchTab(tab){
-  ['requests','execs','funnel','review','dcr','dashboard'].forEach(t=>{
+  ['updates','requests','execs','funnel','review','dcr','dashboard'].forEach(t=>{
     document.getElementById('panel'+capitalize(t)).classList.toggle('hidden', t!==tab);
     const tabBtn = document.getElementById('tab'+capitalize(t));
     if (tabBtn) tabBtn.classList.toggle('active', t===tab);
   });
+  if(tab==='updates') renderUpdatesFeed();
   if(tab==='requests') renderTable();
   if(tab==='execs') renderExecs();
   if(tab==='funnel') renderFunnelTable();
@@ -1684,7 +1439,6 @@ function resetFilters(){
   document.getElementById('fltStatus').value = 'all';
   document.getElementById('fltVisit').value = 'all';
   document.getElementById('fltSearch').value = '';
-  requestsPage = 1;
   renderTable();
 }
 
@@ -1752,33 +1506,17 @@ function visitChip(r){
 }
 
 function renderTable(){
-  updatePendingApprovalBadge();
-  const filteredRows = getVisibleRequests(); // oldest -> newest (creation order)
+  const rows = getVisibleRequests();
   const tbody = document.getElementById('requestsBody');
   const displayMap = requestDisplayNumbers();
-  const fullRights = isFullRights(currentUser.role);
 
-  const totalCount = filteredRows.length;
-  const newestFirst = [...filteredRows].reverse();
-
-  let displayRows, totalPages = 1;
-  if (requestsViewMode === 'recent'){
-    displayRows = newestFirst.slice(0, RECENT_ROW_COUNT);
-  } else {
-    totalPages = Math.max(1, Math.ceil(totalCount / PAGE_ROW_COUNT));
-    if (requestsPage > totalPages) requestsPage = totalPages;
-    if (requestsPage < 1) requestsPage = 1;
-    const start = (requestsPage - 1) * PAGE_ROW_COUNT;
-    displayRows = newestFirst.slice(start, start + PAGE_ROW_COUNT);
-  }
-
-  if (totalCount === 0){
+  if (rows.length === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="11">No visit requests match these filters.</td></tr>`;
-    renderPaginationBar('requestsPaginationBar', 0, requestsViewMode, requestsPage, totalPages, 'showAllRequests', 'showRecentRequests', 'goToRequestsPage');
     return;
   }
 
-  tbody.innerHTML = displayRows.map(r => {
+  tbody.innerHTML = rows.map(r => {
+    const fullRights = isFullRights(currentUser.role);
     const isOwnerExec = currentUser.role === 'sales_executive' && r.sales_executive_id === currentUser.id;
     let actions = '';
 
@@ -1824,8 +1562,6 @@ function renderTable(){
       <td><div class="row-actions">${actions}</div></td>
     </tr>`;
   }).join('');
-
-  renderPaginationBar('requestsPaginationBar', totalCount, requestsViewMode, requestsPage, totalPages, 'showAllRequests', 'showRecentRequests', 'goToRequestsPage');
 }
 
 // ---------- New request (executive) ----------
@@ -2654,13 +2390,15 @@ function renderReviewSummary(){
     });
   });
   const rate = billingTarget > 0 ? Math.round((totalAchievement/billingTarget)*100) : 0;
+  const showRateEmoji = currentUser.role !== 'manager';
+  const rateEmoji = showRateEmoji ? (rate >= 70 ? '😊' : '😢') : '';
   const scopeLabel = execId === 'all' ? 'All executives' : 'This month';
 
   grid.innerHTML = `
     <div class="stat-card"><div class="stat-label">${execId==='all'?'Consolidated Billing Target':'Monthly Billing Target'}</div><div class="stat-num">${formatCurrency(billingTarget)}</div><div class="stat-sub">ORA + Contracts + Consumables</div></div>
     <div class="stat-card"><div class="stat-label">Total Commitment</div><div class="stat-num">${formatCurrency(totalCommitment)}</div><div class="stat-sub">All 5 weeks combined</div></div>
     <div class="stat-card"><div class="stat-label">Total Achievement</div><div class="stat-num">${formatCurrency(totalAchievement)}</div><div class="stat-sub">All 5 weeks combined</div></div>
-    <div class="stat-card"><div class="stat-label">Achievement Rate</div><div class="stat-num">${rate}%</div><div class="stat-sub">Target vs Achievement</div></div>
+    <div class="stat-card"><div class="stat-label">Achievement Rate</div><div class="stat-num">${rate}%${showRateEmoji ? ` <span aria-hidden="true">${rateEmoji}</span>` : ''}</div><div class="stat-sub">Target vs Achievement · 70% threshold</div></div>
     <div class="stat-card"><div class="stat-label">Total Month Unit Sale</div><div class="stat-num">${totalUnitSale}</div><div class="stat-sub">A4 + A3 + Plotters &middot; ${scopeLabel}</div></div>
     <div class="stat-card"><div class="stat-label">Total Collection</div><div class="stat-num">${formatCurrency(totalCollection)}</div><div class="stat-sub">${scopeLabel}</div></div>
   `;
@@ -3038,54 +2776,97 @@ function getVisibleDcr(){
   }).sort((a,b) => (b.date||'').localeCompare(a.date||'') || b.s_no - a.s_no);
 }
 
+// ---------- Updates / Broadcast ----------
+function escapeHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function formatBroadcastDate(iso){
+  const d = new Date(iso);
+  if (isNaN(d)) return '';
+  return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function renderUpdatesFeed(){
+  const feed = document.getElementById('updatesFeed');
+  if (!feed || !currentUser) return;
+  const fullRights = isFullRights(currentUser.role);
+  if (!broadcasts.length){
+    feed.innerHTML = `<p class="subline">No updates posted yet.</p>`;
+    return;
+  }
+  const sorted = [...broadcasts].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
+  feed.innerHTML = sorted.map(u => `
+    <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+        <div>
+          <div style="font-weight:600;">${escapeHtml(u.postedByName)}</div>
+          <div class="subline mono">${formatBroadcastDate(u.createdAt)}</div>
+        </div>
+        ${fullRights ? `<button class="icon-btn decline" onclick="deleteBroadcast('${u.uid}')">Delete</button>` : ''}
+      </div>
+      <div style="margin-top:8px;white-space:pre-wrap;line-height:1.5;">${escapeHtml(u.message)}</div>
+    </div>`).join('');
+}
+async function postBroadcast(){
+  if (!isFullRights(currentUser.role)) return;
+  const input = document.getElementById('updateMessageInput');
+  const message = input.value.trim();
+  if (!message) return;
+  broadcasts.push({
+    uid: genUid('upd'),
+    message,
+    postedById: currentUser.id,
+    postedByName: currentUser.name,
+    postedByRole: currentUser.role,
+    createdAt: new Date().toISOString()
+  });
+  input.value = '';
+  renderUpdatesFeed();
+  scheduleDebouncedSave(400);
+}
+async function deleteBroadcast(uid){
+  if (!isFullRights(currentUser.role)) return;
+  if (!confirm('Delete this update?')) return;
+  broadcasts = broadcasts.filter(u => u.uid !== uid);
+  renderUpdatesFeed();
+  scheduleDebouncedSave(400);
+}
+
+// ---------- Stress Buster: breathing circle ----------
+// The circle itself grows/shrinks via a pure CSS animation (breatheCycle,
+// 8s loop). This just keeps the "Breathe In" / "Breathe Out" text label
+// in sync with that same 4s-in / 4s-out rhythm.
+(function initBreathingLabel(){
+  const label = document.getElementById('breathingLabel');
+  if (!label) return;
+  setInterval(() => {
+    label.textContent = (label.textContent === 'Breathe In') ? 'Breathe Out' : 'Breathe In';
+  }, 4000);
+})();
+
 function renderDcrMiniDashboard(){
   const statGrid = document.getElementById('dcrDashStatGrid');
   const byExecWrap = document.getElementById('dcrDashByExec');
-  const telesaleStatGrid = document.getElementById('dcrTelesaleStatGrid');
   if (!statGrid) return;
 
-  const todayStr = new Date().toISOString().slice(0,10);
-  const today = dcrEntries.filter(d => d.date === todayStr);
-  const nonTelesaleToday = today.filter(d => d.call_type !== 'Telesale');
-  const telesaleToday = today.filter(d => d.call_type === 'Telesale');
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - 6);
+  const cutoffStr = cutoff.toISOString().slice(0,10);
+  const recent = dcrEntries.filter(d => d.date >= cutoffStr);
 
   const byMode = { 'Call':0, 'Email':0, 'Direct visit':0 };
-  nonTelesaleToday.forEach(d => { if (byMode[d.approached_by] !== undefined) byMode[d.approached_by]++; });
-
-  const telesaleTotals = telesaleToday.reduce((acc, d) => {
-    acc.coldEmail += Number(d.cold_email_sent||0);
-    acc.coldCall += Number(d.cold_phone_call||0);
-    acc.followupCall += Number(d.followup_call||0);
-    acc.followupEmail += Number(d.followup_email||0);
-    return acc;
-  }, { coldEmail:0, coldCall:0, followupCall:0, followupEmail:0 });
-  const telesaleUnitTotal = telesaleTotals.coldEmail + telesaleTotals.coldCall + telesaleTotals.followupCall + telesaleTotals.followupEmail;
-
-  const totalActivities = nonTelesaleToday.length + telesaleUnitTotal;
+  recent.forEach(d => { if (byMode[d.approached_by] !== undefined) byMode[d.approached_by]++; });
 
   statGrid.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Total Activities</div><div class="stat-num">${totalActivities}</div><div class="stat-sub">Today</div></div>
-    <div class="stat-card"><div class="stat-label">Calls</div><div class="stat-num">${byMode['Call']}</div><div class="stat-sub">Today</div></div>
-    <div class="stat-card"><div class="stat-label">Direct Visits</div><div class="stat-num">${byMode['Direct visit']}</div><div class="stat-sub">Today</div></div>
-    <div class="stat-card"><div class="stat-label">Emails</div><div class="stat-num">${byMode['Email']}</div><div class="stat-sub">Today</div></div>
+    <div class="stat-card"><div class="stat-label">Total Activities</div><div class="stat-num">${recent.length}</div><div class="stat-sub">Last 7 days</div></div>
+    <div class="stat-card"><div class="stat-label">Calls</div><div class="stat-num">${byMode['Call']}</div><div class="stat-sub">Last 7 days</div></div>
+    <div class="stat-card"><div class="stat-label">Direct Visits</div><div class="stat-num">${byMode['Direct visit']}</div><div class="stat-sub">Last 7 days</div></div>
+    <div class="stat-card"><div class="stat-label">Emails</div><div class="stat-num">${byMode['Email']}</div><div class="stat-sub">Last 7 days</div></div>
   `;
 
-  if (telesaleStatGrid){
-    telesaleStatGrid.innerHTML = `
-      <div class="stat-card"><div class="stat-label">Total Cold Email Sent</div><div class="stat-num">${telesaleTotals.coldEmail}</div><div class="stat-sub">Today</div></div>
-      <div class="stat-card"><div class="stat-label">Total Cold Phone Call</div><div class="stat-num">${telesaleTotals.coldCall}</div><div class="stat-sub">Today</div></div>
-      <div class="stat-card"><div class="stat-label">Follow up Call</div><div class="stat-num">${telesaleTotals.followupCall}</div><div class="stat-sub">Today</div></div>
-      <div class="stat-card"><div class="stat-label">Follow up Email</div><div class="stat-num">${telesaleTotals.followupEmail}</div><div class="stat-sub">Today</div></div>
-    `;
-  }
-
   const byExec = {};
-  today.forEach(d => {
-    const units = d.call_type === 'Telesale'
-      ? Number(d.cold_email_sent||0) + Number(d.cold_phone_call||0) + Number(d.followup_call||0) + Number(d.followup_email||0)
-      : 1;
-    byExec[d.sales_executive_id] = (byExec[d.sales_executive_id]||0) + units;
-  });
+  recent.forEach(d => { byExec[d.sales_executive_id] = (byExec[d.sales_executive_id]||0) + 1; });
   const byExecRows = Object.keys(byExec).map(id => ({ name: execName(id), count: byExec[id] })).sort((a,b)=>b.count-a.count);
   const maxCount = Math.max(1, ...byExecRows.map(x=>x.count));
   byExecWrap.innerHTML = byExecRows.length ? byExecRows.map(x => `
@@ -3093,7 +2874,7 @@ function renderDcrMiniDashboard(){
       <div>${x.name}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.round((x.count/maxCount)*100)}%"></div></div>
       <div class="mono" style="text-align:right;">${x.count}</div>
-    </div>`).join('') : `<p class="subline">No activity logged today.</p>`;
+    </div>`).join('') : `<p class="subline">No activity logged in the last 7 days.</p>`;
 }
 
 function renderDcrTable(){
@@ -3128,21 +2909,6 @@ function renderDcrTable(){
       actions += `<button class="icon-btn" onclick="openDcrModal(${d.s_no})">Edit</button>
                   <button class="icon-btn decline" onclick="deleteDcrEntry(${d.s_no})">Delete</button>`;
     }
-    if (d.call_type === 'Telesale'){
-      const execTag = fullRights ? '<div class="subline"><em>'+execName(d.sales_executive_id)+'</em></div>' : '';
-      const breakdown = `Cold Email Sent: <strong>${d.cold_email_sent||0}</strong> &middot; Cold Phone Call: <strong>${d.cold_phone_call||0}</strong> &middot; Follow up Call: <strong>${d.followup_call||0}</strong> &middot; Follow up Email: <strong>${d.followup_email||0}</strong>`;
-      return `<tr>
-        <td class="mono">${d.date}</td>
-        <td>${d.call_type}</td>
-        <td><strong>Telesale Summary</strong>${execTag}</td>
-        <td>—</td>
-        <td>—</td>
-        <td>—</td>
-        <td>—</td>
-        <td style="max-width:280px;">${breakdown}</td>
-        <td><div class="row-actions">${actions}</div></td>
-      </tr>`;
-    }
     const custCol = `<strong>${d.customer_name}</strong>${fullRights ? '<div class="subline"><em>'+execName(d.sales_executive_id)+'</em></div>' : ''}`;
     const contactPersonCol = `${d.contact_name||''}${d.designation ? '<div class="subline">'+d.designation+'</div>' : ''}`;
     const contactCol = `${d.contact_number || ''}${d.contact_email ? '<div class="subline">'+d.contact_email+'</div>' : ''}`;
@@ -3160,16 +2926,6 @@ function renderDcrTable(){
   }).join('');
 
   renderPaginationBar('dcrPaginationBar', totalCount, dcrViewMode, dcrPage, totalPages, 'showAllDcr', 'showRecentDcr', 'goToDcrPage');
-}
-
-function toggleDcrCallTypeFields(){
-  const isTelesale = document.getElementById('dcrCallType').value === 'Telesale';
-  document.getElementById('dcrNormalFields').classList.toggle('hidden', isTelesale);
-  document.getElementById('dcrTelesaleFields').classList.toggle('hidden', !isTelesale);
-  // Only require customer-facing fields when this is not a Telesale summary entry
-  document.getElementById('dcrCustomer').required = !isTelesale;
-  document.getElementById('dcrContactNumber').required = !isTelesale;
-  document.getElementById('dcrLocation').required = !isTelesale;
 }
 
 function openDcrModal(sNo){
@@ -3199,16 +2955,11 @@ function openDcrModal(sNo){
     document.getElementById('dcrLocation').value = d.location;
     document.getElementById('dcrApproachedBy').value = d.approached_by;
     document.getElementById('dcrRemarks').value = d.remarks;
-    document.getElementById('dcrColdEmail').value = d.cold_email_sent || 0;
-    document.getElementById('dcrColdCall').value = d.cold_phone_call || 0;
-    document.getElementById('dcrFollowupCall').value = d.followup_call || 0;
-    document.getElementById('dcrFollowupEmail').value = d.followup_email || 0;
   } else {
     document.getElementById('dcrModalTitle').textContent = 'Add Daily Activity';
     document.getElementById('dcrModalSub').textContent = fullRights ? 'Pick which executive this call belongs to.' : '';
     document.getElementById('dcrDate').value = new Date().toISOString().slice(0,10);
   }
-  toggleDcrCallTypeFields();
   document.getElementById('dcrModal').classList.remove('hidden');
 }
 
@@ -3226,27 +2977,9 @@ async function submitDcrForm(e){
   }
   document.getElementById('dcrFormError').classList.add('hidden');
 
-  const callType = document.getElementById('dcrCallType').value;
-  const isTelesale = callType === 'Telesale';
-
-  const entry = isTelesale ? {
+  const entry = {
     date: document.getElementById('dcrDate').value,
-    call_type: callType,
-    customer_name: 'Telesale Summary',
-    contact_name: '',
-    designation: '',
-    contact_number: '',
-    contact_email: '',
-    location: '',
-    approached_by: '',
-    remarks: '',
-    cold_email_sent: parseInt(document.getElementById('dcrColdEmail').value, 10) || 0,
-    cold_phone_call: parseInt(document.getElementById('dcrColdCall').value, 10) || 0,
-    followup_call: parseInt(document.getElementById('dcrFollowupCall').value, 10) || 0,
-    followup_email: parseInt(document.getElementById('dcrFollowupEmail').value, 10) || 0,
-  } : {
-    date: document.getElementById('dcrDate').value,
-    call_type: callType,
+    call_type: document.getElementById('dcrCallType').value,
     customer_name: document.getElementById('dcrCustomer').value,
     contact_name: document.getElementById('dcrContactName').value,
     designation: document.getElementById('dcrDesignation').value,
@@ -3255,10 +2988,6 @@ async function submitDcrForm(e){
     location: document.getElementById('dcrLocation').value,
     approached_by: document.getElementById('dcrApproachedBy').value,
     remarks: document.getElementById('dcrRemarks').value,
-    cold_email_sent: 0,
-    cold_phone_call: 0,
-    followup_call: 0,
-    followup_email: 0,
   };
 
   if (sNo){
@@ -3288,8 +3017,6 @@ function exportDcrExcel(){
     'Contact Name': d.contact_name||'', 'Designation': d.designation||'',
     'Contact Number': d.contact_number||'', 'Contact Email': d.contact_email||'',
     'Location': d.location, 'Mode': d.approached_by, 'Remarks': d.remarks||'',
-    'Total Cold Email Sent': d.cold_email_sent||'', 'Total Cold Phone Call': d.cold_phone_call||'',
-    'Follow up Call': d.followup_call||'', 'Follow up Email': d.followup_email||'',
     'Sales Executive': execName(d.sales_executive_id)
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -3329,10 +3056,6 @@ async function importDcrFile(file){
         location: row['Location'] || '',
         approached_by: row['Mode'] || 'Call',
         remarks: row['Remarks'] || '',
-        cold_email_sent: parseInt(row['Total Cold Email Sent'], 10) || 0,
-        cold_phone_call: parseInt(row['Total Cold Phone Call'], 10) || 0,
-        followup_call: parseInt(row['Follow up Call'], 10) || 0,
-        followup_email: parseInt(row['Follow up Email'], 10) || 0,
       });
       imported++;
     });
@@ -3431,6 +3154,28 @@ function exportExcel(){
   XLSX.writeFile(wb, 'visit-requests.xlsx');
 }
 
+// ---------- Sales Executive mood emoji ----------
+// A little emoji next to the Sales Executive's name that cycles through
+// different moods every few seconds with a quick flip animation. Only
+// shown for the sales_executive role (see enterApp()).
+(function initMoodEmoji(){
+  const MOOD_EMOJIS = ['🙂','😄','😎','🤩','🥳','😴','🤔','😅','😌'];
+  let moodIndex = 0;
+  const el = document.getElementById('moodEmoji');
+  if (!el) return;
+
+  function cycleMood(){
+    if (el.classList.contains('hidden')) return; // only animate for Sales Executives
+    el.classList.remove('mood-zoom');
+    void el.offsetWidth; // restart animation even if triggered again quickly
+    el.classList.add('mood-zoom');
+    setTimeout(() => {
+      moodIndex = (moodIndex + 1) % MOOD_EMOJIS.length;
+      el.textContent = MOOD_EMOJIS[moodIndex];
+    }, 400); // swap right at the zoomed-in peak of the animation
+  }
+  setInterval(cycleMood, 10000);
+})();
 </script>
 </body>
 </html>

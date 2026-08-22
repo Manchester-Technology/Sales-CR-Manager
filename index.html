@@ -746,11 +746,6 @@
       </div>
 
       <div class="card">
-        <div class="section-head"><h2>Week-Wise Sales Executive Commitment — Billing, Machine Sale &amp; Collection</h2></div>
-        <div id="consWeekWiseTableWrap" style="overflow-x:auto;"></div>
-      </div>
-
-      <div class="card">
         <div class="section-head"><h2>2. Current Month Target &amp; Achievement — Billing, Machine Sale &amp; Collection</h2></div>
         <div id="consMonthlyTableWrap" style="overflow-x:auto;"></div>
       </div>
@@ -2162,10 +2157,15 @@ function renderTable(){
     let actions = '';
 
     if (fullRights){
-      if (r.approval_status === 'Pending Manager Approval'){
-        actions += `<button class="icon-btn approve" onclick="managerDecision('${r.uid}','accept')">Accept</button>
-                    <button class="icon-btn decline" onclick="managerDecision('${r.uid}','decline')">Decline</button>`;
-      }
+      // Accept/Decline are always available, not just while pending, so a
+      // Manager/Assistant Manager can correct an earlier decision either
+      // way (e.g. reverse a Decline back to Accept) instead of being stuck
+      // once a decision is made.
+      const acceptBtn = `<button class="icon-btn approve" onclick="managerDecision('${r.uid}','accept')">Accept</button>`;
+      const declineBtn = `<button class="icon-btn decline" onclick="managerDecision('${r.uid}','decline')">Decline</button>`;
+      if (r.approval_status === 'Accepted') actions += declineBtn;
+      else if (r.approval_status === 'Declined') actions += acceptBtn;
+      else actions += acceptBtn + declineBtn;
       actions += `<button class="icon-btn" onclick="openEditModal('${r.uid}')">Edit</button>`;
       if (r.edit_requested){
         actions += `<button class="icon-btn grant" onclick="allowEditAccess('${r.uid}')">Allow Edit</button>`;
@@ -4443,7 +4443,6 @@ function dateInConsWeek(dateStr, ym, week){
 function renderConsolidatedDashboard(){
   renderConsolidatedWeekSelector();
   renderConsWeeklyTable();
-  renderConsWeekWiseTable();
   renderConsMonthlyTable();
   renderConsDcrTable();
 }
@@ -4509,79 +4508,6 @@ function renderConsWeeklyTable(){
       </tbody>
     </table>
     <p class="subline" style="padding:12px 16px;">Showing ${w} of ${formatClosureMonth(ym)}.</p>
-  `;
-}
-
-// ----- Week-Wise Sales Executive Commitment (all 5 weeks at a glance) -----
-// Unlike Report 1 (one week at a time, commitment + achievement), this
-// shows every week's Commitment side by side for the whole month, so a
-// Manager/Assistant Manager can see the full month's committed plan per
-// executive without clicking through the week selector.
-function consWeekWiseRows(){
-  const ym = getConsPeriod();
-  const rows = [];
-  executives.forEach(ex => {
-    const month = getMonthReview(ex.id, ym);
-    REVIEW_WEEKS.forEach(w => {
-      const wk = month.weeks[w];
-      rows.push({
-        name: ex.name,
-        week: w,
-        billingCommit: (wk.billing.commitment.ora||0)+(wk.billing.commitment.contracts||0)+(wk.billing.commitment.consumables||0),
-        machineCommit: (wk.machines.commitment.a4||0)+(wk.machines.commitment.a3||0)+(wk.machines.commitment.plotters||0),
-        collCommit: wk.collection.commitment||0,
-      });
-    });
-  });
-  return rows;
-}
-function renderConsWeekWiseTable(){
-  const wrap = document.getElementById('consWeekWiseTableWrap');
-  if (executives.length === 0){
-    wrap.innerHTML = `<p class="subline" style="padding:20px;">No sales executives yet.</p>`;
-    return;
-  }
-  const ym = getConsPeriod();
-  const rows = consWeekWiseRows();
-
-  const weekTotals = {};
-  REVIEW_WEEKS.forEach(w => { weekTotals[w] = { billingCommit:0, machineCommit:0, collCommit:0 }; });
-  rows.forEach(r => {
-    weekTotals[r.week].billingCommit += r.billingCommit;
-    weekTotals[r.week].machineCommit += r.machineCommit;
-    weekTotals[r.week].collCommit += r.collCommit;
-  });
-
-  let bodyHtml = '';
-  let lastName = null;
-  rows.forEach(r => {
-    const isNewExec = r.name !== lastName;
-    lastName = r.name;
-    bodyHtml += `<tr ${isNewExec ? 'style="border-top:2px solid var(--border);"' : ''}>
-      <td>${isNewExec ? `<strong>${escapeHtml(r.name)}</strong>` : ''}</td>
-      <td class="mono">${r.week}</td>
-      <td class="mono">${formatCurrency(r.billingCommit)}</td>
-      <td class="mono">${r.machineCommit}</td>
-      <td class="mono">${formatCurrency(r.collCommit)}</td>
-    </tr>`;
-  });
-  REVIEW_WEEKS.forEach(w => {
-    const t = weekTotals[w];
-    bodyHtml += `<tr style="font-weight:700;background:var(--cloud);">
-      <td>Total</td>
-      <td class="mono">${w}</td>
-      <td class="mono">${formatCurrency(t.billingCommit)}</td>
-      <td class="mono">${t.machineCommit}</td>
-      <td class="mono">${formatCurrency(t.collCommit)}</td>
-    </tr>`;
-  });
-
-  wrap.innerHTML = `
-    <table>
-      <thead><tr><th>Sales Executive</th><th>Week</th><th>Billing Commitment</th><th>Machine Commitment</th><th>Collection Commitment</th></tr></thead>
-      <tbody>${bodyHtml}</tbody>
-    </table>
-    <p class="subline" style="padding:12px 16px;">Showing all 5 weeks of ${formatClosureMonth(ym)}. Commitment only — see Report 1 above for Commitment vs. Achievement on a single week.</p>
   `;
 }
 
@@ -4749,13 +4675,6 @@ function exportConsolidatedExcel(){
     'Machine Commitment': r.machineCommit, 'Machine Achievement': r.machineAchieve,
     'Collection Commitment': r.collCommit, 'Collection Achievement': r.collAchieve,
   }));
-  const weekWiseRows = consWeekWiseRows().map(r => ({
-    'Sales Executive': r.name,
-    'Week': r.week,
-    'Billing Commitment': r.billingCommit,
-    'Machine Commitment': r.machineCommit,
-    'Collection Commitment': r.collCommit,
-  }));
   const monthlyRows = consMonthlyRows().map(r => ({
     'Sales Executive': r.name,
     'Billing Target': r.billingTarget, 'Billing Achievement': r.billingAchieve,
@@ -4775,7 +4694,6 @@ function exportConsolidatedExcel(){
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(weeklyRows), `Weekly ${w}`.slice(0,31));
-  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(weekWiseRows), 'Week-Wise Commitment');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthlyRows), 'Monthly Target-Achv');
   XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dcrRows), `DCR ${w}`.slice(0,31));
   XLSX.writeFile(wb, `consolidated-dashboard-${ym}.xlsx`);

@@ -1138,7 +1138,6 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Mr5JTjv99D57_ZtbjZZO_g_8UXas-wh';
 const supabaseClient = (SUPABASE_URL.startsWith('http'))
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
-const STATE_ROW_ID = 'app-state';
 
 // Every "Year" dropdown in the app should always start from 2026 (the
 // business's first year on this system) through at least next year, plus
@@ -1320,6 +1319,9 @@ function genUid(prefix){
 function migrateUids(){
   funnels.forEach(f => { if (!f.uid) f.uid = genUid('fn'); });
   requests.forEach(r => { if (!r.uid) r.uid = genUid('req'); });
+  dcrEntries.forEach(d => { if (!d.uid) d.uid = 'dcr-' + d.s_no; });
+  dailyPerformance.forEach(d => { if (!d.uid) d.uid = genUid('dp'); });
+  leads.forEach(l => { if (!l.uid) l.uid = genUid('lead'); });
 }
 
 // BUG FIX (Weekly Review lag / data not storing): instead of saving to
@@ -1352,50 +1354,214 @@ async function forceSaveNow(btn){
   }
 }
 
-// ---------- Shared storage load/save ----------
-// lastLoadedStateJSON lets syncState() tell whether the data coming back
-// from Supabase is actually different from what's already on screen, so it
-// can skip reassigning arrays and re-rendering the active tab when nothing
-// changed — this is what was causing the whole table to flicker/rebuild
-// every 5 seconds even when no one else had made any edits.
-let lastLoadedStateJSON = null;
+// ---------- Shared storage: one row per record + incremental sync ----------
+// Every record (request, funnel entry, DCR entry, executive, review month,
+// update, setting) is its own row in a crm_* table. Saving sends ONLY the rows
+// that changed; polling asks the server "what changed since X?" through the
+// crm_get_changes RPC, which answers with ~200 bytes when nothing changed.
+// (Schema + one-time data import: supabase_migration.sql)
+let syncCursor = null;          // server time of the last successful sync
+const snap = {};                // table -> Map(id -> canonical JSON as last synced)
+const createdMap = new Map();   // "table|id" -> server created_at (ms), keeps Sr. No. order stable
+
+function sortKeys(v){
+  if (Array.isArray(v)) return v.map(sortKeys);
+  if (v && typeof v === 'object'){
+    const o = {};
+    Object.keys(v).sort().forEach(k => { o[k] = sortKeys(v[k]); });
+    return o;
+  }
+  return v;
+}
+function canon(v){ return JSON.stringify(sortKeys(v)); }
+
+// Overwrite an object's contents without changing its identity, so references
+// such as currentUser keep pointing at the live record.
+function replaceInPlace(target, src){
+  Object.keys(target).forEach(k => { if (!(k in src)) delete target[k]; });
+  Object.assign(target, src);
+}
+
+const LISTS = {
+  crm_requests:   { key:'requests',   get:()=>requests,   id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+  crm_funnels:    { key:'funnels',    get:()=>funnels,    id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+  crm_dcr:        { key:'dcr',        get:()=>dcrEntries, id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+  crm_executives: { key:'executives', get:()=>executives, id:o=>o.id,  setId:(o,id)=>{ o.id = id; } },
+  crm_daily_perf: { key:'dailyperf',  get:()=>dailyPerformance, id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+  crm_leads:      { key:'leads',      get:()=>leads,      id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+};
+const REVIEW_SLOTS = { m:'months', yb:'ytdBilling', yu:'ytdUnits' };
+const TABLE_ORDER = [...Object.keys(LISTS), 'crm_reviews', 'crm_settings'];
+
+function defaultMonthCanon(){
+  const weeks = {};
+  REVIEW_WEEKS.forEach(w => { weeks[w] = defaultReviewWeek(); });
+  return canon({ targets: defaultReviewTargets(), weeks });
+}
+
+// Everything currently in memory, as table -> Map(id -> { data, canon }).
+function collectState(){
+  const out = {};
+  for (const name of Object.keys(LISTS)){
+    const cfg = LISTS[name];
+    const m = new Map();
+    cfg.get().forEach(o => {
+      const id = cfg.id(o);
+      if (id === undefined || id === null || id === '') return;
+      m.set(String(id), { data:o, canon:canon(o) });
+    });
+    out[name] = m;
+  }
+
+  // Weekly reviews: one row per exec+month and per exec+year (YTD). Untouched
+  // all-zero defaults (created just by viewing a month) are not uploaded.
+  const rv = new Map();
+  const prevRv = snap.crm_reviews || new Map();
+  const defMonth = defaultMonthCanon();
+  const defYtd = canon({ target:0, achievement:0 });
+  Object.keys(weeklyReviews).forEach(execId => {
+    const e = weeklyReviews[execId] || {};
+    Object.keys(REVIEW_SLOTS).forEach(kind => {
+      const slot = e[REVIEW_SLOTS[kind]] || {};
+      Object.keys(slot).forEach(key => {
+        const id = execId + '|' + kind + '|' + key;
+        const c = canon(slot[key]);
+        const isDefault = c === (kind === 'm' ? defMonth : defYtd);
+        if (!isDefault || prevRv.has(id)) rv.set(id, { data:slot[key], canon:c });
+      });
+    });
+  });
+  out.crm_reviews = rv;
+
+  const st = new Map();
+  st.set('manager',          { data:manager,          canon:canon(manager) });
+  st.set('assistantManager', { data:assistantManager, canon:canon(assistantManager) });
+  st.set('machineModels',    { data:{ list:machineModels }, canon:canon({ list:machineModels }) });
+  st.set('machineBrands',    { data:{ list:machineBrands }, canon:canon({ list:machineBrands }) });
+  out.crm_settings = st;
+  return out;
+}
+
+// Merge rows returned by the server into memory. Returns true if anything
+// actually differed from what was already on screen.
+function applyChanges(res){
+  let changed = false;
+
+  for (const name of Object.keys(LISTS)){
+    const cfg = LISTS[name];
+    const rows = res[cfg.key] || [];
+    if (!rows.length) continue;
+    const s = snap[name] || (snap[name] = new Map());
+    const arr = cfg.get();
+    const pos = new Map();
+    arr.forEach((o, i) => { pos.set(String(cfg.id(o)), i); });
+    const removeIds = new Set();
+    let inserted = false;
+
+    for (const row of rows){
+      createdMap.set(name + '|' + row.id, Date.parse(row.created_at) || 0);
+      if (row.deleted){
+        if (pos.has(row.id)){ removeIds.add(row.id); changed = true; }
+        s.delete(row.id);
+        continue;
+      }
+      const o = row.data || {};
+      cfg.setId(o, row.id);
+      const c = canon(o);
+      if (s.get(row.id) === c && pos.has(row.id)) continue;
+      s.set(row.id, c);
+      if (pos.has(row.id)){
+        replaceInPlace(arr[pos.get(row.id)], o);
+      } else {
+        arr.push(o);
+        pos.set(row.id, arr.length - 1);
+        inserted = true;
+      }
+      changed = true;
+    }
+    if (removeIds.size){
+      const keep = arr.filter(o => !removeIds.has(String(cfg.id(o))));
+      arr.length = 0;
+      keep.forEach(o => arr.push(o));
+    }
+    if (inserted && arr.length > 1){
+      const key = o => { const t = createdMap.get(name + '|' + cfg.id(o)); return t === undefined ? Infinity : t; };
+      arr.sort((a, b) => { const ka = key(a), kb = key(b); return ka < kb ? -1 : ka > kb ? 1 : 0; });
+    }
+  }
+
+  const reviewRows = res.reviews || [];
+  if (reviewRows.length){
+    const s = snap.crm_reviews || (snap.crm_reviews = new Map());
+    for (const row of reviewRows){
+      const parts = row.id.split('|');
+      const execId = parts[0], slot = REVIEW_SLOTS[parts[1]], key = parts.slice(2).join('|');
+      if (!execId || !slot || !key) continue;
+      const bucket = weeklyReviews[execId] && weeklyReviews[execId][slot];
+      if (row.deleted){
+        if (bucket && key in bucket){ delete bucket[key]; changed = true; }
+        s.delete(row.id);
+        continue;
+      }
+      const c = canon(row.data);
+      const cur = bucket && bucket[key];
+      if (s.get(row.id) === c && cur) continue;
+      if (!weeklyReviews[execId]) weeklyReviews[execId] = { months:{} };
+      if (!weeklyReviews[execId][slot]) weeklyReviews[execId][slot] = {};
+      if (cur) replaceInPlace(cur, row.data);
+      else weeklyReviews[execId][slot][key] = row.data;
+      s.set(row.id, c);
+      changed = true;
+    }
+  }
+
+  const settingRows = res.settings || [];
+  if (settingRows.length){
+    const s = snap.crm_settings || (snap.crm_settings = new Map());
+    for (const row of settingRows){
+      if (row.deleted) continue;
+      const c = canon(row.data);
+      if (s.get(row.id) === c) continue;
+      const d = row.data || {};
+      if (row.id === 'manager') replaceInPlace(manager, d);
+      else if (row.id === 'assistantManager') replaceInPlace(assistantManager, d);
+      else if (row.id === 'machineModels') machineModels = Array.isArray(d.list) ? d.list : [];
+      else if (row.id === 'machineBrands') machineBrands = Array.isArray(d.list) ? d.list : [...DEFAULT_MACHINE_BRANDS];
+      else continue;
+      s.set(row.id, c);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function hideSaveError(){
+  const banner = document.getElementById('saveErrorBanner');
+  if (banner) banner.classList.add('hidden');
+}
+
+// Returns true if anything new arrived (so the caller knows to re-render).
 async function loadState(){
   if (!supabaseClient){
     console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
-    return true;
+    return false;
   }
   try {
-    const { data, error } = await supabaseClient
-      .from('app_state')
-      .select('value')
-      .eq('id', STATE_ROW_ID)
-      .maybeSingle();
+    const { data, error } = await supabaseClient.rpc('crm_get_changes', { since: syncCursor });
     if (error) throw error;
-    if (data && data.value){
-      const json = JSON.stringify(data.value);
-      if (json === lastLoadedStateJSON) return false; // nothing changed since last load
-      lastLoadedStateJSON = json;
-      const stateData = data.value;
-      manager = stateData.manager || manager;
-      assistantManager = stateData.assistantManager || assistantManager;
-      executives = stateData.executives || [];
-      requests = stateData.requests || [];
-      funnels = stateData.funnels || [];
-      weeklyReviews = stateData.weeklyReviews || {};
-      dcrEntries = stateData.dcrEntries || [];
-      nextDcrSNo = stateData.nextDcrSNo || 1;
-      dailyPerformance = stateData.dailyPerformance || [];
-      leads = stateData.leads || [];
-      machineModels = stateData.machineModels || [];
-      machineBrands = stateData.machineBrands || [...DEFAULT_MACHINE_BRANDS];
-    }
-    // No row yet (data is null) -> first run, keep the defaults above.
+    if (!data) return false;
+    const changed = applyChanges(data);
     migrateUids();
-    return true;
+    let maxSNo = 0;
+    dcrEntries.forEach(d => { if ((d.s_no || 0) > maxSNo) maxSNo = d.s_no; });
+    if (maxSNo + 1 > nextDcrSNo) nextDcrSNo = maxSNo + 1;
+    syncCursor = data.server_now;
+    hideSaveError();
+    return changed;
   } catch (err) {
     console.error('Failed to load state from Supabase:', err);
     showSaveError((err && err.message) ? err.message : String(err));
-    return true; // unsure what changed — safest to let the caller re-render
+    return false;
   }
 }
 
@@ -1405,6 +1571,53 @@ function showSaveError(message){
   if (!banner || !text) return;
   text.textContent = message;
   banner.classList.remove('hidden');
+}
+
+// Diff memory against what the server last confirmed and upload only the
+// difference. Removed records are soft-deleted (deleted=true) so other
+// devices learn about the removal through the incremental sync.
+async function doSave(){
+  if (!supabaseClient){
+    console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
+    return;
+  }
+  const cur = collectState();
+  for (const name of TABLE_ORDER){
+    const now = cur[name];
+    const s = snap[name] || (snap[name] = new Map());
+    const rows = [];
+    const meta = [];
+    for (const [id, v] of now){
+      if (s.get(id) !== v.canon){ rows.push({ id, data:v.data, deleted:false }); meta.push([id, v.canon]); }
+    }
+    if (name !== 'crm_settings'){
+      for (const id of s.keys()){
+        if (!now.has(id)){ rows.push({ id, data:{}, deleted:true }); meta.push([id, null]); }
+      }
+    }
+    for (let i = 0; i < rows.length; i += 200){
+      const { error } = await supabaseClient.from(name).upsert(rows.slice(i, i + 200), { onConflict:'id' });
+      if (error) throw error;
+      meta.slice(i, i + 200).forEach(([id, c]) => { if (c === null) s.delete(id); else s.set(id, c); });
+    }
+  }
+  hideSaveError();
+}
+
+// Saves run one at a time, in order. saveInFlight goes up synchronously so the
+// background sync can never run between an edit and its save.
+let saveChain = Promise.resolve();
+function saveState(){
+  saveInFlight++;
+  const p = saveChain
+    .then(doSave)
+    .catch(err => {
+      console.error('Failed to save state to Supabase:', err);
+      showSaveError((err && err.message) ? err.message : String(err));
+    })
+    .finally(() => { saveInFlight--; });
+  saveChain = p;
+  return p;
 }
 
 let syncNoticeTimer = null;
@@ -1505,194 +1718,6 @@ function checkForNewPendingApprovalsAndNotify(){
   }
 }
 
-// ---------- Concurrency-safe merge helpers ----------
-// These let two people save at roughly the same time without one of them
-// silently wiping out what the other just wrote. Instead of always
-// overwriting the whole row, a save first checks whether the row has
-// changed since it was last loaded; if so, it merges the specific pending
-// local changes onto the latest server data (record by record) rather than
-// discarding whichever save "loses".
-
-// Array collections (requests, funnels, dcrEntries, executives) keyed by a
-// stable id field: additions from either side are kept, our deletions are
-// honored, and an edit we made locally wins over an untouched server
-// record — a genuine same-record double-edit is the one narrow case where
-// one side's edit is overwritten, instead of everything since the last load.
-function mergeCollection(idKey, freshArr, baseArr, localArr){
-  freshArr = freshArr || []; baseArr = baseArr || []; localArr = localArr || [];
-  const baseById = new Map(baseArr.map(r => [String(r[idKey]), r]));
-  const localById = new Map(localArr.map(r => [String(r[idKey]), r]));
-  const result = [];
-  const seen = new Set();
-
-  freshArr.forEach(freshRec => {
-    const id = String(freshRec[idKey]);
-    seen.add(id);
-    const inBase = baseById.has(id);
-    const inLocal = localById.has(id);
-    if (!inBase && !inLocal){
-      result.push(freshRec); // someone else added this after our baseline
-    } else if (inBase && !inLocal){
-      // we deleted this locally since baseline -> honor the deletion
-    } else if (inLocal){
-      const localRec = localById.get(id);
-      const baseRec = baseById.get(id) || null;
-      const localChanged = JSON.stringify(localRec) !== JSON.stringify(baseRec);
-      result.push(localChanged ? localRec : freshRec);
-    }
-  });
-
-  localArr.forEach(localRec => {
-    const id = String(localRec[idKey]);
-    if (!seen.has(id) && !baseById.has(id)){
-      result.push(localRec); // our new record, not seen anywhere else yet
-      seen.add(id);
-    }
-  });
-
-  return result;
-}
-
-// Plain string lists (Model / Brand names): union of both sides' additions,
-// minus anything we deliberately removed locally.
-function mergeStringSet(freshArr, baseArr, localArr){
-  freshArr = freshArr || []; baseArr = baseArr || []; localArr = localArr || [];
-  const baseSet = new Set(baseArr);
-  const localSet = new Set(localArr);
-  let result = freshArr.filter(v => !(baseSet.has(v) && !localSet.has(v)));
-  localArr.forEach(v => {
-    if (!baseSet.has(v) && !result.includes(v)) result.push(v);
-  });
-  return result;
-}
-
-// Nested plain objects (manager/assistantManager accounts, weeklyReviews'
-// exec -> month -> week tree): recursively keeps our changed leaf values,
-// and takes the server's value for anything we didn't touch.
-function deepMergeByBaseline(fresh, baseline, local){
-  const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
-  if (isObj(fresh) || isObj(baseline) || isObj(local)){
-    const keys = new Set([
-      ...(isObj(fresh) ? Object.keys(fresh) : []),
-      ...(isObj(baseline) ? Object.keys(baseline) : []),
-      ...(isObj(local) ? Object.keys(local) : []),
-    ]);
-    const result = {};
-    keys.forEach(k => {
-      result[k] = deepMergeByBaseline(
-        isObj(fresh) ? fresh[k] : undefined,
-        isObj(baseline) ? baseline[k] : undefined,
-        isObj(local) ? local[k] : undefined
-      );
-    });
-    return result;
-  }
-  const localChanged = JSON.stringify(local === undefined ? null : local) !== JSON.stringify(baseline === undefined ? null : baseline);
-  return localChanged ? local : fresh;
-}
-
-function buildStatePayload(){
-  return { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, dailyPerformance, leads, machineModels, machineBrands };
-}
-
-function applyStatePayloadLocally(payload){
-  manager = payload.manager; assistantManager = payload.assistantManager;
-  executives = payload.executives; requests = payload.requests; funnels = payload.funnels;
-  weeklyReviews = payload.weeklyReviews; dcrEntries = payload.dcrEntries; nextDcrSNo = payload.nextDcrSNo;
-  dailyPerformance = payload.dailyPerformance || [];
-  leads = payload.leads || [];
-  machineModels = payload.machineModels; machineBrands = payload.machineBrands;
-}
-
-// options.forceOverwrite skips the merge entirely and just writes local
-// state as-is — used by Restore Backup, where overwriting everything is
-// the whole point rather than something to merge around.
-async function saveState(options = {}){
-  if (!supabaseClient){
-    console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
-    return;
-  }
-  saveInFlight++;
-  try {
-    const maxAttempts = 4;
-    for (let attempt = 1; attempt <= maxAttempts; attempt++){
-      const { data: freshRow, error: freshErr } = await supabaseClient
-        .from('app_state')
-        .select('value, updated_at')
-        .eq('id', STATE_ROW_ID)
-        .maybeSingle();
-      if (freshErr) throw freshErr;
-
-      const freshValue = (freshRow && freshRow.value) ? freshRow.value : null;
-      const freshJSON = freshValue ? JSON.stringify(freshValue) : null;
-      let payload;
-      let merged = false;
-
-      if (options.forceOverwrite || !freshValue || freshJSON === lastLoadedStateJSON){
-        payload = buildStatePayload();
-      } else {
-        merged = true;
-        const baseline = lastLoadedStateJSON ? JSON.parse(lastLoadedStateJSON) : {};
-        payload = {
-          manager: deepMergeByBaseline(freshValue.manager, baseline.manager, manager),
-          assistantManager: deepMergeByBaseline(freshValue.assistantManager, baseline.assistantManager, assistantManager),
-          executives: mergeCollection('id', freshValue.executives, baseline.executives, executives),
-          requests: mergeCollection('uid', freshValue.requests, baseline.requests, requests),
-          funnels: mergeCollection('uid', freshValue.funnels, baseline.funnels, funnels),
-          weeklyReviews: deepMergeByBaseline(freshValue.weeklyReviews, baseline.weeklyReviews, weeklyReviews),
-          dcrEntries: mergeCollection('s_no', freshValue.dcrEntries, baseline.dcrEntries, dcrEntries),
-          nextDcrSNo: Math.max(freshValue.nextDcrSNo || 1, nextDcrSNo || 1),
-          dailyPerformance: mergeCollection('uid', freshValue.dailyPerformance, baseline.dailyPerformance, dailyPerformance),
-          leads: mergeCollection('uid', freshValue.leads, baseline.leads, leads),
-          machineModels: mergeStringSet(freshValue.machineModels, baseline.machineModels, machineModels),
-          machineBrands: mergeStringSet(freshValue.machineBrands, baseline.machineBrands, machineBrands),
-        };
-      }
-
-      const nowIso = new Date().toISOString();
-      let result;
-      if (freshRow){
-        // Conditional write: only succeeds if no one else has written since
-        // we just read it a moment ago (compare-and-swap on updated_at).
-        result = await supabaseClient
-          .from('app_state')
-          .update({ value: payload, updated_at: nowIso })
-          .eq('id', STATE_ROW_ID)
-          .eq('updated_at', freshRow.updated_at)
-          .select();
-      } else {
-        result = await supabaseClient
-          .from('app_state')
-          .insert({ id: STATE_ROW_ID, value: payload, updated_at: nowIso })
-          .select();
-      }
-      if (result.error) throw result.error;
-
-      if (result.data && result.data.length > 0){
-        // Write succeeded uncontested.
-        if (merged){
-          applyStatePayloadLocally(payload);
-          showSyncNotice('Synced with changes made by someone else on your team.');
-          updatePendingApprovalBadge();
-          checkForNewPendingApprovalsAndNotify();
-          refreshActiveTabView();
-        }
-        lastLoadedStateJSON = JSON.stringify(payload);
-        return;
-      }
-      // Someone else wrote in the instant between our read and write —
-      // loop around and retry against their latest data.
-    }
-    throw new Error('Could not save — someone else is saving at the exact same time. Please try again.');
-  } catch (err) {
-    console.error('Failed to save state to Supabase:', err);
-    showSaveError((err && err.message) ? err.message : String(err));
-  } finally {
-    saveInFlight--;
-  }
-}
-
-
 function isFullRights(role){ return role === 'manager' || role === 'assistant_manager'; }
 
 // ---------- Manage Passwords (Manager / Assistant Manager) ----------
@@ -1791,11 +1816,13 @@ async function bootstrap(){
   document.getElementById('loadingScreen').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
   showSalesQuote();
-  setInterval(syncState, 5000);
+  setInterval(syncState, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncState(); });
 }
 bootstrap();
 
 async function syncState(){
+  if (document.hidden || !supabaseClient) return; // never poll background tabs
   // Don't yank data out from under someone mid-edit in a modal, mid-save,
   // while a debounced edit (e.g. Weekly Review) hasn't been written yet, or
   // while they currently have a field focused (typing in a search box, a
@@ -1934,10 +1961,12 @@ async function resetAllData(){
   weeklyReviews = {};
   dcrEntries = [];
   nextDcrSNo = 1;
+  dailyPerformance = [];
+  leads = [];
   machineModels = [];
   machineBrands = [...DEFAULT_MACHINE_BRANDS];
   currentUser = null;
-  await saveState({ forceOverwrite: true });
+  await saveState();
   alert('All data has been erased. The app will now reload.');
   location.reload();
 }
@@ -3548,8 +3577,8 @@ function renderDcrTable(){
     const isOwner = currentUser.role === 'sales_executive' && d.sales_executive_id === currentUser.id;
     let actions = '';
     if (fullRights || isOwner){
-      actions += `<button class="icon-btn" onclick="openDcrModal(${d.s_no})">Edit</button>
-                  <button class="icon-btn decline" onclick="deleteDcrEntry(${d.s_no})">Delete</button>`;
+      actions += `<button class="icon-btn" onclick="openDcrModal('${d.uid}')">Edit</button>
+                  <button class="icon-btn decline" onclick="deleteDcrEntry('${d.uid}')">Delete</button>`;
     }
     if (d.call_type === 'Telesale'){
       const execTag = fullRights ? '<div class="subline"><em>'+execName(d.sales_executive_id)+'</em></div>' : '';
@@ -3595,9 +3624,9 @@ function toggleDcrCallTypeFields(){
   document.getElementById('dcrLocation').required = !isTelesale;
 }
 
-function openDcrModal(sNo){
+function openDcrModal(uid){
   const fullRights = isFullRights(currentUser.role);
-  if (!sNo && fullRights && executives.length === 0){
+  if (!uid && fullRights && executives.length === 0){
     alert('Add a Sales Executive first from the Sales Executives tab.');
     return;
   }
@@ -3605,10 +3634,10 @@ function openDcrModal(sNo){
   document.getElementById('dcrForm').reset();
   document.getElementById('dcrFormError').classList.add('hidden');
   document.getElementById('dcrExecField').classList.toggle('hidden', !fullRights);
-  document.getElementById('dcrId').value = sNo || '';
+  document.getElementById('dcrId').value = uid || '';
 
-  if (sNo){
-    const d = dcrEntries.find(x=>x.s_no===sNo);
+  if (uid){
+    const d = dcrEntries.find(x=>x.uid===uid);
     document.getElementById('dcrModalTitle').textContent = 'Edit Daily Activity';
     document.getElementById('dcrModalSub').textContent = execName(d.sales_executive_id);
     if (fullRights) document.getElementById('dcrExec').value = d.sales_executive_id;
@@ -3638,7 +3667,7 @@ function openDcrModal(sNo){
 async function submitDcrForm(e){
   e.preventDefault();
   const fullRights = isFullRights(currentUser.role);
-  const sNo = parseInt(document.getElementById('dcrId').value, 10) || null;
+  const uid = document.getElementById('dcrId').value || null;
   const execId = fullRights ? document.getElementById('dcrExec').value : currentUser.id;
 
   if (fullRights && !execId){
@@ -3684,12 +3713,12 @@ async function submitDcrForm(e){
     followup_email: 0,
   };
 
-  if (sNo){
-    const d = dcrEntries.find(x=>x.s_no===sNo);
+  if (uid){
+    const d = dcrEntries.find(x=>x.uid===uid);
     Object.assign(d, entry);
     if (fullRights) d.sales_executive_id = execId;
   } else {
-    dcrEntries.push(Object.assign({ s_no: nextDcrSNo++, sales_executive_id: execId }, entry));
+    dcrEntries.push(Object.assign({ uid: genUid('dcr'), s_no: nextDcrSNo++, sales_executive_id: execId }, entry));
   }
 
   closeModal('dcrModal');
@@ -3697,9 +3726,9 @@ async function submitDcrForm(e){
   renderDcrTable();
 }
 
-async function deleteDcrEntry(sNo){
+async function deleteDcrEntry(uid){
   if (!confirm('Delete this activity entry? This cannot be undone.')) return;
-  dcrEntries = dcrEntries.filter(d => d.s_no !== sNo);
+  dcrEntries = dcrEntries.filter(d => d.uid !== uid);
   await saveState();
   renderDcrTable();
 }
@@ -3740,6 +3769,7 @@ async function importDcrFile(file){
         execId = match ? match.id : currentUser.id;
       }
       dcrEntries.push({
+        uid: genUid('dcr'),
         s_no: nextDcrSNo++,
         sales_executive_id: execId,
         date: row['Date'] || new Date().toISOString().slice(0,10),

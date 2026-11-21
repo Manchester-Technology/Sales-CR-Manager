@@ -44,9 +44,9 @@
   }
   .logo-chip{background:#fff;border-radius:10px;display:inline-flex;align-items:center;padding:8px 14px;box-shadow:0 1px 2px rgba(0,0,0,0.08);}
   .logo-chip.nav-chip{padding:5px 11px;border-radius:8px;}
-  .logo-img-brand{height:68px;display:block;}
-  .logo-img-nav{height:44px;display:block;}
-  .logo-img-card{height:48px;display:block;}
+  .logo-img-brand{height:52px;display:block;}
+  .logo-img-nav{height:30px;display:block;}
+  .logo-img-card{height:38px;display:block;}
   .login-brand .top-label{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--amber);font-weight:600;}
   .login-brand h1{font-size:38px;line-height:1.15;max-width:460px;margin:24px 0 12px;font-weight:600;}
   .login-brand p{color:#B9C2D6;max-width:420px;font-size:15px;line-height:1.6;}
@@ -162,28 +162,6 @@
 
   .section-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
   .section-head h2{font-size:18px;margin:0;}
-
-  /* ---------- Sales Executive mood emoji ---------- */
-  .mood-emoji{display:inline-block;font-size:15px;margin-left:4px;transform-origin:50% 60%;}
-  @keyframes moodZoom{
-    0%{ transform:scale(1); }
-    50%{ transform:scale(2); }
-    100%{ transform:scale(1); }
-  }
-  .mood-emoji.mood-zoom{animation:moodZoom .8s ease-in-out;}
-
-  /* ---------- Stress Buster (breathing circle) ---------- */
-  .breathing-circle{
-    width:110px;height:110px;border-radius:50%;margin:0 auto;
-    background:radial-gradient(circle at 35% 30%, #FDE9C8 0%, var(--amber) 60%, var(--amber-dark) 100%);
-    box-shadow:0 4px 18px rgba(217,143,43,0.35);
-    animation:breatheCycle 8s ease-in-out infinite;
-  }
-  @keyframes breatheCycle{
-    0%{ transform:scale(0.7); }
-    50%{ transform:scale(1.15); }
-    100%{ transform:scale(0.7); }
-  }
   .lock-note{font-size:12px;color:var(--slate);display:flex;align-items:center;gap:6px;margin-top:4px;}
 
   form .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:0 16px;}
@@ -219,6 +197,13 @@
 <div id="saveErrorBanner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9999;background:#B42318;color:white;font-family:'Inter',sans-serif;font-size:13.5px;padding:10px 16px;text-align:center;">
   ⚠️ Couldn't save to Supabase: <span id="saveErrorText" class="mono"></span>
   <button onclick="document.getElementById('saveErrorBanner').classList.add('hidden')" style="margin-left:10px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.4);color:white;padding:3px 10px;border-radius:6px;font-size:12px;cursor:pointer;">Dismiss</button>
+</div>
+
+<!-- Shown briefly when a save had to merge with changes someone else made in
+     the meantime, so it's never silently overwritten without the person
+     knowing. Auto-hides after a few seconds since it's informational. -->
+<div id="syncNoticeBanner" class="hidden" style="position:fixed;top:0;left:0;right:0;z-index:9998;background:#175CD3;color:white;font-family:'Inter',sans-serif;font-size:13.5px;padding:10px 16px;text-align:center;">
+  🔄 <span id="syncNoticeText"></span>
 </div>
 
 <!-- ============ LOADING SCREEN ============ -->
@@ -333,64 +318,36 @@
     </div>
     <div class="user-chip">
       <span id="userName" class="mono" style="font-size:13px;"></span>
-      <span id="moodEmoji" class="mood-emoji hidden" aria-hidden="true">🙂</span>
       <span id="userRolePill" class="role-pill"></span>
+      <button class="btn btn-secondary hidden" id="notifyBtn" onclick="enableNotifications()" style="margin-bottom:0;padding:6px 12px;font-size:12.5px;">🔔 Enable Notifications</button>
+      <button class="btn btn-secondary hidden" id="managePasswordsBtn" onclick="openPasswordsModal()" style="margin-bottom:0;padding:6px 12px;font-size:12.5px;">Manage Passwords</button>
       <button class="logout-btn" onclick="logout()">Log out</button>
     </div>
   </nav>
 
   <div class="tabstrip">
-    <button class="tab" id="tabUpdates" onclick="switchTab('updates')">Updates</button>
     <button class="tab hidden" id="tabFunnel" onclick="switchTab('funnel')">Sales Funnel</button>
     <button class="tab hidden" id="tabReview" onclick="switchTab('review')">Weekly Review</button>
     <button class="tab hidden" id="tabDcr" onclick="switchTab('dcr')">DCR</button>
-    <button class="tab active" id="tabRequests" onclick="switchTab('requests')">Visit Requests</button>
+    <button class="tab hidden" id="tabDailyperf" onclick="switchTab('dailyperf')">Daily Performance</button>
+    <button class="tab hidden" id="tabLeads" onclick="switchTab('leads')">Leads</button>
+    <button class="tab active" id="tabRequests" onclick="switchTab('requests')">Visit Requests <span id="requestsPendingBadge" class="hidden" style="background:#B42318;color:white;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:700;margin-left:4px;"></span></button>
     <button class="tab hidden" id="tabDashboard" onclick="switchTab('dashboard')">Dashboard</button>
+    <button class="tab hidden" id="tabConsolidated" onclick="switchTab('consolidated')">Consolidate Dashboard</button>
     <button class="tab hidden" id="tabExecs" onclick="switchTab('execs')">Sales Executives</button>
   </div>
 
   <main>
-    <!-- ===== Updates / Broadcast tab (everyone can view; Manager / Assistant Manager can post) ===== -->
-    <section id="panelUpdates" class="hidden">
-      <div class="card hidden" id="updatesComposer">
-        <div class="section-head"><h2>Post an Update</h2></div>
-        <div class="field full">
-          <label>Message</label>
-          <textarea id="updateMessageInput" rows="3" placeholder="Share an update, announcement, or reminder with the sales team..."></textarea>
-        </div>
-        <div style="display:flex;justify-content:flex-end;margin-top:10px;">
-          <button class="btn btn-primary" onclick="postBroadcast()">Post Update</button>
-        </div>
-      </div>
-      <div class="card">
-        <div class="section-head">
-          <h2>Updates</h2>
-          <button class="btn btn-secondary" onclick="forceSaveNow(this)">💾 Save Now</button>
-        </div>
-        <div id="updatesFeed"></div>
-      </div>
-      <div class="card hidden" id="stressBusterCard">
-        <div class="section-head">
-          <h2>Stress Buster</h2>
-        </div>
-        <div style="text-align:center;padding:8px 0;">
-          <div id="breathingCircle" class="breathing-circle"></div>
-          <p id="breathingLabel" style="margin-top:16px;font-weight:600;font-size:14.5px;color:var(--ink);">Breathe In</p>
-          <p class="subline" style="margin-top:4px;">A slow moment to reset — just follow the circle.</p>
-        </div>
-      </div>
-    </section>
-
     <!-- ===== Requests tab ===== -->
     <section id="panelRequests">
       <div class="card filter-bar">
         <div class="field">
           <label>Year</label>
-          <select id="fltYear" onchange="renderTable()"></select>
+          <select id="fltYear" onchange="requestsFilterChanged()"></select>
         </div>
         <div class="field">
           <label>Month</label>
-          <select id="fltMonth" onchange="renderTable()">
+          <select id="fltMonth" onchange="requestsFilterChanged()">
             <option value="all">All months</option>
             <option value="1">January</option><option value="2">February</option><option value="3">March</option>
             <option value="4">April</option><option value="5">May</option><option value="6">June</option>
@@ -400,7 +357,7 @@
         </div>
         <div class="field">
           <label>Emirate</label>
-          <select id="fltEmirate" onchange="renderTable()">
+          <select id="fltEmirate" onchange="requestsFilterChanged()">
             <option value="all">All emirates</option>
             <option>Dubai</option><option>Abu Dhabi</option><option>Sharjah</option>
             <option>Ajman</option><option>Umm al Quwain</option><option>Fujairah</option>
@@ -408,7 +365,7 @@
         </div>
         <div class="field">
           <label>Approval Status</label>
-          <select id="fltStatus" onchange="renderTable()">
+          <select id="fltStatus" onchange="requestsFilterChanged()">
             <option value="all">All statuses</option>
             <option>Pending Manager Approval</option>
             <option>Accepted</option><option>Declined</option>
@@ -416,13 +373,13 @@
         </div>
         <div class="field">
           <label>Visit Status</label>
-          <select id="fltVisit" onchange="renderTable()">
+          <select id="fltVisit" onchange="requestsFilterChanged()">
             <option value="all">All</option><option>Pending</option><option>Closed</option>
           </select>
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltSearch" placeholder="Customer, contact, location..." oninput="renderTable()">
+          <input type="text" id="fltSearch" placeholder="Customer, contact, location..." oninput="debouncedRenderTable()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetFilters()">Reset</button>
@@ -444,6 +401,7 @@
           <tbody id="requestsBody"></tbody>
         </table>
       </div>
+      <div class="pagination-bar" id="requestsPaginationBar"></div>
     </section>
 
     <!-- ===== Sales Executives tab (Assistant Manager / Manager) ===== -->
@@ -457,7 +415,7 @@
           </div>
         </div>
         <table>
-          <thead><tr><th>Name</th><th>Open Requests</th><th>Total Requests</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Open Requests</th><th>Total Requests</th><th>Lead Distribution</th><th>Actions</th></tr></thead>
           <tbody id="execsBody"></tbody>
         </table>
       </div>
@@ -513,7 +471,7 @@
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="funnelFilterChanged()">
+          <input type="text" id="fltFunnelSearch" placeholder="Customer, contact, location..." oninput="debouncedFunnelFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetFunnelFilters()">Reset</button>
@@ -587,11 +545,14 @@
 
     <!-- ===== Daily Activity / DCR tab (Sales Executive: own; Manager/Assistant Manager: full access) ===== -->
     <section id="panelDcr" class="hidden">
-      <div class="section-head" style="margin-bottom:14px;"><h2>Daily Call Report</h2></div>
       <div class="card hidden" id="dcrMiniDashboard">
-        <div class="section-head"><h2>Last 7 Days Activity</h2></div>
+        <div class="section-head"><h2>Today's Activity</h2></div>
         <div class="stat-grid" id="dcrDashStatGrid"></div>
         <div id="dcrDashByExec"></div>
+      </div>
+      <div class="card hidden" id="dcrTelesaleCard">
+        <div class="section-head"><h2>Telesale — Today</h2></div>
+        <div class="stat-grid" id="dcrTelesaleStatGrid"></div>
       </div>
       <div class="card filter-bar">
         <div class="field hidden" id="dcrExecFilterField">
@@ -602,7 +563,7 @@
           <label>Call Type</label>
           <select id="fltDcrCallType" onchange="dcrFilterChanged()">
             <option value="all">All</option>
-            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
+            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option><option>Telesale</option>
           </select>
         </div>
         <div class="field">
@@ -613,7 +574,7 @@
         </div>
         <div class="field" style="flex:1;min-width:160px;">
           <label>Search</label>
-          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="dcrFilterChanged()">
+          <input type="text" id="fltDcrSearch" placeholder="Customer, contact, location..." oninput="debouncedDcrFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetDcrFilters()">Reset</button>
@@ -640,6 +601,101 @@
       <div class="pagination-bar" id="dcrPaginationBar"></div>
     </section>
 
+    <!-- ===== Daily Performance tab (Sales Executive: own; Manager/Assistant Manager: full access) ===== -->
+    <section id="panelDailyperf" class="hidden">
+      <div class="section-head" style="margin-bottom:14px;"><h2>Daily Performance</h2></div>
+
+      <div class="section-head" style="margin-bottom:10px;"><h2 style="font-size:14px;" id="dpTodayLabel">Today</h2></div>
+      <div class="stat-grid" id="dpTodayStatGrid" style="margin-bottom:22px;"></div>
+
+      <div class="section-head" style="margin-bottom:10px;"><h2 style="font-size:14px;" id="dpMonthLabel">This Month</h2></div>
+      <div class="stat-grid" id="dpMonthStatGrid" style="margin-bottom:22px;"></div>
+
+      <div class="card filter-bar">
+        <div class="field hidden" id="dpExecFilterField">
+          <label>Sales Executive</label>
+          <select id="fltDpExec" onchange="dpFilterChanged()"></select>
+        </div>
+        <div class="field">
+          <label>Month</label>
+          <select id="fltDpMonth" onchange="dpFilterChanged()">
+            <option value="all">All months</option>
+            <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+            <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+            <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Year</label>
+          <select id="fltDpYear" onchange="dpFilterChanged()"></select>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-secondary" onclick="resetDpFilters()">Reset</button>
+          <button class="btn btn-secondary" onclick="exportDpExcel()">Export Excel</button>
+          <button class="btn btn-primary" onclick="openDpModal()">+ Fill Today's Card</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr id="dpTableHead">
+              <th>Date</th><th>Total Billing</th><th>Total Collection</th>
+              <th>Direct Calls</th><th>Telesale</th><th>New Leads</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="dpBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-bar" id="dpPaginationBar"></div>
+    </section>
+
+    <!-- ===== Leads tab ===== -->
+    <!-- Visible to everyone: Manager/Assistant Manager (and any Sales
+         Executive granted lead-distribution rights) see and assign the
+         whole pool; a regular Sales Executive only sees leads assigned to
+         them and can update status + remark, never delete. -->
+    <section id="panelLeads" class="hidden">
+      <div class="card filter-bar">
+        <div class="field hidden" id="leadsAssignedFilterField">
+          <label>Assigned To</label>
+          <select id="fltLeadsAssigned" onchange="leadsFilterChanged()"></select>
+        </div>
+        <div class="field">
+          <label>Status</label>
+          <select id="fltLeadsStatus" onchange="leadsFilterChanged()">
+            <option value="all">All statuses</option>
+            <option value="unassigned">Not started</option>
+            <option>Called</option><option>Emailed</option><option>Quoted</option>
+            <option>Hold</option><option>Lost</option><option>Won</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Search</label>
+          <input id="fltLeadsSearch" type="text" placeholder="Customer, contact, or mobile" oninput="debouncedLeadsFilterChanged()">
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-secondary" onclick="resetLeadsFilters()">Reset</button>
+          <button class="btn btn-secondary" onclick="exportLeadsExcel()">Export Excel</button>
+          <button class="btn btn-primary hidden" id="addLeadBtn" onclick="openLeadModal()">+ Add Lead</button>
+        </div>
+      </div>
+
+      <div class="card" style="padding:0;overflow-x:auto;">
+        <table>
+          <thead>
+            <tr id="leadsTableHead">
+              <th>Date</th><th>Customer</th><th>Contact</th><th>Mobile</th>
+              <th>Status</th><th>Status Updated</th><th>Remarks</th><th>Assigned To</th><th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="leadsBody"></tbody>
+        </table>
+      </div>
+      <div class="pagination-bar" id="leadsPaginationBar"></div>
+    </section>
+
     <!-- ===== Dashboard tab (Manager / Assistant Manager only) ===== -->
     <section id="panelDashboard" class="hidden">
       <div class="stat-grid" id="dashStatGrid"></div>
@@ -659,6 +715,44 @@
           <thead><tr><th>Customer</th><th>Sales Executive</th><th>Business Head</th><th>Value</th><th>Expected Closure</th><th>Status</th></tr></thead>
           <tbody id="dashUpcomingBody"></tbody>
         </table>
+      </div>
+    </section>
+
+    <!-- ===== Consolidate Dashboard tab (Manager / Assistant Manager only) ===== -->
+    <section id="panelConsolidated" class="hidden">
+      <div class="card filter-bar">
+        <div class="field">
+          <label>Month</label>
+          <select id="consMonthSelect" onchange="onConsPeriodChange()">
+            <option value="01">January</option><option value="02">February</option><option value="03">March</option>
+            <option value="04">April</option><option value="05">May</option><option value="06">June</option>
+            <option value="07">July</option><option value="08">August</option><option value="09">September</option>
+            <option value="10">October</option><option value="11">November</option><option value="12">December</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Year</label>
+          <select id="consYearSelect" onchange="onConsPeriodChange()"></select>
+        </div>
+        <div class="filter-actions">
+          <button class="btn btn-secondary" onclick="exportConsolidatedExcel()">Export Excel</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-head"><h2>1. Weekly Commitment &amp; Achievement — Billing, Machine Sale &amp; Collection</h2></div>
+        <div class="week-selector" id="consWeekSelector"></div>
+        <div id="consWeeklyTableWrap" style="overflow-x:auto;"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head"><h2>2. Current Month Target &amp; Achievement — Billing, Machine Sale &amp; Collection</h2></div>
+        <div id="consMonthlyTableWrap" style="overflow-x:auto;"></div>
+      </div>
+
+      <div class="card">
+        <div class="section-head"><h2>3. Weekly DCR Report (incl. Telesale)</h2></div>
+        <div id="consDcrTableWrap" style="overflow-x:auto;"></div>
       </div>
     </section>
   </main>
@@ -727,6 +821,10 @@
         <label id="execPasswordLabel">Password</label>
         <input id="execPassword" type="password" placeholder="Set a login password">
         <p id="execPasswordHint" class="hidden" style="color:var(--slate);font-size:12px;margin:6px 0 0;">Leave blank to keep the current password.</p>
+      </div>
+      <div class="field" style="display:flex;align-items:center;gap:8px;flex-direction:row;">
+        <input type="checkbox" id="execCanDistributeLeads" style="width:auto;margin:0;">
+        <label style="margin:0;" for="execCanDistributeLeads">Can distribute leads (assign leads to other Sales Executives, in addition to Manager/Assistant Manager)</label>
       </div>
       <p id="execFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Fill in name, email, and a password.</p>
       <div class="modal-actions">
@@ -885,20 +983,28 @@
         </div>
         <div class="field"><label>Date</label><input required id="dcrDate" type="date"></div>
         <div class="field"><label>Call Type</label>
-          <select id="dcrCallType">
-            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option>
+          <select id="dcrCallType" onchange="toggleDcrCallTypeFields()">
+            <option>Cold Call</option><option>Payment Follow up</option><option>Order Follow up</option><option>Account management</option><option>Telesale</option>
           </select>
         </div>
-        <div class="field"><label>Customer Name</label><input required id="dcrCustomer" type="text"></div>
-        <div class="field"><label>Contact Name</label><input id="dcrContactName" type="text"></div>
-        <div class="field"><label>Designation</label><input id="dcrDesignation" type="text" placeholder="e.g. Procurement Manager"></div>
-        <div class="field"><label>Contact Number</label><input required id="dcrContactNumber" type="tel" placeholder="+971 5X XXX XXXX"></div>
-        <div class="field"><label>Contact Email</label><input id="dcrContactEmail" type="email"></div>
-        <div class="field"><label>Location</label><input required id="dcrLocation" type="text"></div>
-        <div class="field"><label>Mode</label>
-          <select id="dcrApproachedBy"><option>Call</option><option>Email</option><option>Direct visit</option></select>
+        <div id="dcrNormalFields" style="display:contents;">
+          <div class="field"><label>Customer Name</label><input id="dcrCustomer" type="text"></div>
+          <div class="field"><label>Contact Name</label><input id="dcrContactName" type="text"></div>
+          <div class="field"><label>Designation</label><input id="dcrDesignation" type="text" placeholder="e.g. Procurement Manager"></div>
+          <div class="field"><label>Contact Number</label><input id="dcrContactNumber" type="tel" placeholder="+971 5X XXX XXXX"></div>
+          <div class="field"><label>Contact Email</label><input id="dcrContactEmail" type="email"></div>
+          <div class="field"><label>Location</label><input id="dcrLocation" type="text"></div>
+          <div class="field"><label>Mode</label>
+            <select id="dcrApproachedBy"><option>Call</option><option>Email</option><option>Direct visit</option></select>
+          </div>
+          <div class="field full"><label>Remarks / Requirement</label><textarea id="dcrRemarks" placeholder="Notes or requirement gathered from this call"></textarea></div>
         </div>
-        <div class="field full"><label>Remarks / Requirement</label><textarea id="dcrRemarks" placeholder="Notes or requirement gathered from this call"></textarea></div>
+        <div id="dcrTelesaleFields" class="hidden" style="display:contents;">
+          <div class="field"><label>Total Cold Email Sent</label><input id="dcrColdEmail" type="number" min="0" step="1" value="0"></div>
+          <div class="field"><label>Total Cold Phone Call</label><input id="dcrColdCall" type="number" min="0" step="1" value="0"></div>
+          <div class="field"><label>Follow up Call</label><input id="dcrFollowupCall" type="number" min="0" step="1" value="0"></div>
+          <div class="field"><label>Follow up Email</label><input id="dcrFollowupEmail" type="number" min="0" step="1" value="0"></div>
+        </div>
       </div>
       <p id="dcrFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Please fill in all required fields.</p>
       <div class="modal-actions">
@@ -906,6 +1012,118 @@
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ============ Daily Performance Card Modal ============ -->
+<div id="dpModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 id="dpModalTitle">Daily Performance Card</h3>
+    <p class="sub" id="dpModalSub"></p>
+    <form id="dpForm" onsubmit="submitDpForm(event, false)">
+      <input type="hidden" id="dpUid">
+      <div class="form-grid">
+        <div class="field hidden" id="dpExecField">
+          <label>Sales Executive</label>
+          <select id="dpExec" onchange="recalcDpActivity()"></select>
+        </div>
+        <div class="field"><label>Date</label><input required id="dpDate" type="date" onchange="recalcDpActivity()"></div>
+        <div class="field"><label>1. Total Billing</label><input required id="dpBilling" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field"><label>2. Total Collection</label><input required id="dpCollection" type="number" min="0" step="0.01" value="0"></div>
+        <div class="field"><label>3. Total Activity — Direct Calls <span class="mono" style="font-weight:400;color:var(--slate);">(from DCR)</span></label><input readonly id="dpDirectCalls" type="number" value="0" style="background:var(--cloud);cursor:not-allowed;"></div>
+        <div class="field"><label>3. Total Activity — Telesale <span class="mono" style="font-weight:400;color:var(--slate);">(from DCR)</span></label><input readonly id="dpTelesale" type="number" value="0" style="background:var(--cloud);cursor:not-allowed;"></div>
+        <div class="field"><label>4. New Leads</label><input required id="dpNewLeads" type="number" min="0" step="1" value="0"></div>
+      </div>
+      <p id="dpFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Please fill in all fields.</p>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('dpModal')">Cancel</button>
+        <button type="submit" class="btn btn-secondary">Save</button>
+        <button type="button" class="btn btn-primary" onclick="submitDpForm(event, true)">Save &amp; Share to WhatsApp</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Lead Add/Edit Modal ============ -->
+<!-- No field is mandatory — this mirrors the requirement that leads can be
+     captured with whatever info is on hand and filled in later. Which
+     fields show depends on the viewer: someone who can manage leads
+     (Manager / Assistant Manager / a Sales Executive with distribution
+     rights) sees everything, including reassignment. A Sales Executive
+     viewing their own assigned lead only sees Status and Remarks — the
+     other fields stay populated underneath so nothing is lost on save. -->
+<div id="leadModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 id="leadModalTitle">Add Lead</h3>
+    <p class="sub" id="leadModalSub">No field is required — fill in whatever you have.</p>
+    <form id="leadForm" onsubmit="submitLeadForm(event)">
+      <input type="hidden" id="leadUid">
+      <div class="form-grid" id="leadManageFields">
+        <div class="field"><label>Date</label><input id="leadDate" type="date"></div>
+        <div class="field"><label>Customer Name</label><input id="leadCustomerName" type="text"></div>
+        <div class="field"><label>Contact Name</label><input id="leadContactName" type="text"></div>
+        <div class="field"><label>Mobile Number</label><input id="leadMobile" type="tel"></div>
+        <div class="field">
+          <label>Assign to Sales Executive</label>
+          <select id="leadAssignedTo"><option value="">Unassigned</option></select>
+        </div>
+      </div>
+      <div class="form-grid">
+        <div class="field">
+          <label>Status</label>
+          <select id="leadStatus">
+            <option value="">Not started</option>
+            <option>Called</option><option>Emailed</option><option>Quoted</option>
+            <option>Hold</option><option>Lost</option><option>Won</option>
+          </select>
+        </div>
+        <div class="field full"><label>Remarks</label><textarea id="leadRemarks" placeholder="Notes about this lead"></textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-secondary" onclick="closeModal('leadModal')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ============ Manage Passwords Modal (Manager / Assistant Manager) ============ -->
+<!-- Either role can reset either account's password from here — this is the
+     recovery path if one of them ever forgets a password or gets locked out,
+     without needing to go into Supabase directly. -->
+<div id="passwordsModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3>Manage Passwords</h3>
+    <p class="sub">Set a new password for the Manager or Assistant Manager account. Leave a section blank to leave that account's password unchanged.</p>
+
+    <form id="managerPasswordForm" onsubmit="submitManagerPasswordReset(event)">
+      <div class="section-head" style="margin-top:4px;"><h2 style="font-size:14px;">Manager Password</h2></div>
+      <div class="form-grid">
+        <div class="field"><label>New Password</label><input type="password" id="pwResetManagerNew" placeholder="At least 6 characters"></div>
+        <div class="field"><label>Confirm Password</label><input type="password" id="pwResetManagerConfirm" placeholder="Re-enter password"></div>
+      </div>
+      <p id="pwResetManagerError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Passwords must match and be at least 6 characters.</p>
+      <div class="modal-actions" style="justify-content:flex-start;margin-bottom:18px;">
+        <button type="submit" class="btn btn-secondary">Update Manager Password</button>
+      </div>
+    </form>
+
+    <form id="amPasswordForm" onsubmit="submitAmPasswordReset(event)">
+      <div class="section-head"><h2 style="font-size:14px;">Assistant Manager Password</h2></div>
+      <div class="form-grid">
+        <div class="field"><label>New Password</label><input type="password" id="pwResetAmNew" placeholder="At least 6 characters"></div>
+        <div class="field"><label>Confirm Password</label><input type="password" id="pwResetAmConfirm" placeholder="Re-enter password"></div>
+      </div>
+      <p id="pwResetAmError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Passwords must match and be at least 6 characters.</p>
+      <div class="modal-actions" style="justify-content:flex-start;">
+        <button type="submit" class="btn btn-secondary">Update Assistant Manager Password</button>
+      </div>
+    </form>
+
+    <p id="pwResetSuccess" class="hidden" style="color:var(--success);font-size:12.5px;margin-top:14px;">Password updated.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('passwordsModal')">Close</button>
+    </div>
   </div>
 </div>
 
@@ -920,7 +1138,6 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Mr5JTjv99D57_ZtbjZZO_g_8UXas-wh';
 const supabaseClient = (SUPABASE_URL.startsWith('http'))
   ? window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
   : null;
-const STATE_ROW_ID = 'app-state';
 
 // Every "Year" dropdown in the app should always start from 2026 (the
 // business's first year on this system) through at least next year, plus
@@ -976,11 +1193,41 @@ let reviewSelectedWeek = 'Week 1';
 let dcrEntries = [];
 let nextDcrSNo = 1;
 
-let broadcasts = []; // { uid, message, postedById, postedByName, postedByRole, createdAt }
+// Daily Performance card: one entry per Sales Executive per day —
+// Total Billing, Total Collection, Total Activity (Direct Calls / Telesale),
+// New Leads. Separate from DCR (per-call log) and Weekly Review (5-week
+// commitment/achievement) — this is a simple daily snapshot the executive
+// fills once a day and can post straight to WhatsApp.
+let dailyPerformance = [];
+
+// Leads: created by Manager/Assistant Manager (or a Sales Executive granted
+// lead-distribution rights) and assigned to a Sales Executive. No field is
+// mandatory. Status changes (Called/Emailed/Quoted/Hold/Lost/Won) append to
+// status_history with the date, so there's a full timeline per lead.
+let leads = [];
 
 // ---------- Session state ----------
 let currentUser = null; // { id, name, email, role }
 let filters = { year:'all', month:'all', emirate:'all', status:'all', visit:'all', search:'' };
+
+// ---------- Search input debouncing ----------
+// The search boxes re-render their whole table on every change. That's
+// unnoticeable at today's data size, but typing a full word could trigger
+// several full re-renders in a row once there are hundreds of rows. These
+// wrap the render/filter calls so they only fire ~250ms after the person
+// stops typing, instead of on every single keystroke — the table still
+// updates almost instantly, it just doesn't rebuild mid-word.
+function debounce(fn, delay){
+  let timer = null;
+  return function(...args){
+    clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(this, args), delay);
+  };
+}
+const debouncedRenderTable = debounce(() => requestsFilterChanged(), 250);
+const debouncedFunnelFilterChanged = debounce(() => funnelFilterChanged(), 250);
+const debouncedDcrFilterChanged = debounce(() => dcrFilterChanged(), 250);
+const debouncedLeadsFilterChanged = debounce(() => leadsFilterChanged(), 250);
 
 // ---------- Pagination (Sales Funnel & DCR) ----------
 // Default view ('recent') shows only the last 10 entries. "Show More"
@@ -994,15 +1241,25 @@ let funnelViewMode = 'recent'; // 'recent' | 'all'
 let funnelPage = 1;
 let dcrViewMode = 'recent'; // 'recent' | 'all'
 let dcrPage = 1;
+let requestsViewMode = 'recent'; // 'recent' | 'all'
+let requestsPage = 1;
+let dailyPerfViewMode = 'recent'; // 'recent' | 'all'
+let dailyPerfPage = 1;
+let leadsViewMode = 'recent'; // 'recent' | 'all'
+let leadsPage = 1;
 
 function funnelFilterChanged(){ funnelPage = 1; renderFunnelTable(); }
 function dcrFilterChanged(){ dcrPage = 1; renderDcrTable(); }
+function requestsFilterChanged(){ requestsPage = 1; renderTable(); }
 function showAllFunnels(){ funnelViewMode = 'all'; funnelPage = 1; renderFunnelTable(); }
 function showRecentFunnels(){ funnelViewMode = 'recent'; funnelPage = 1; renderFunnelTable(); }
 function goToFunnelPage(p){ funnelPage = p; renderFunnelTable(); }
 function showAllDcr(){ dcrViewMode = 'all'; dcrPage = 1; renderDcrTable(); }
 function showRecentDcr(){ dcrViewMode = 'recent'; dcrPage = 1; renderDcrTable(); }
 function goToDcrPage(p){ dcrPage = p; renderDcrTable(); }
+function showAllRequests(){ requestsViewMode = 'all'; requestsPage = 1; renderTable(); }
+function showRecentRequests(){ requestsViewMode = 'recent'; requestsPage = 1; renderTable(); }
+function goToRequestsPage(p){ requestsPage = p; renderTable(); }
 
 // Renders a "Show More" link (recent mode) or Prev/Next + page number
 // controls (all mode) into the given container id.
@@ -1062,6 +1319,9 @@ function genUid(prefix){
 function migrateUids(){
   funnels.forEach(f => { if (!f.uid) f.uid = genUid('fn'); });
   requests.forEach(r => { if (!r.uid) r.uid = genUid('req'); });
+  dcrEntries.forEach(d => { if (!d.uid) d.uid = 'dcr-' + d.s_no; });
+  dailyPerformance.forEach(d => { if (!d.uid) d.uid = genUid('dp'); });
+  leads.forEach(l => { if (!l.uid) l.uid = genUid('lead'); });
 }
 
 // BUG FIX (Weekly Review lag / data not storing): instead of saving to
@@ -1094,49 +1354,214 @@ async function forceSaveNow(btn){
   }
 }
 
-// ---------- Shared storage load/save ----------
-// lastLoadedStateJSON lets syncState() tell whether the data coming back
-// from Supabase is actually different from what's already on screen, so it
-// can skip reassigning arrays and re-rendering the active tab when nothing
-// changed — this is what was causing the whole table to flicker/rebuild
-// every 5 seconds even when no one else had made any edits.
-let lastLoadedStateJSON = null;
+// ---------- Shared storage: one row per record + incremental sync ----------
+// Every record (request, funnel entry, DCR entry, executive, review month,
+// update, setting) is its own row in a crm_* table. Saving sends ONLY the rows
+// that changed; polling asks the server "what changed since X?" through the
+// crm_get_changes RPC, which answers with ~200 bytes when nothing changed.
+// (Schema + one-time data import: supabase_migration.sql)
+let syncCursor = null;          // server time of the last successful sync
+const snap = {};                // table -> Map(id -> canonical JSON as last synced)
+const createdMap = new Map();   // "table|id" -> server created_at (ms), keeps Sr. No. order stable
+
+function sortKeys(v){
+  if (Array.isArray(v)) return v.map(sortKeys);
+  if (v && typeof v === 'object'){
+    const o = {};
+    Object.keys(v).sort().forEach(k => { o[k] = sortKeys(v[k]); });
+    return o;
+  }
+  return v;
+}
+function canon(v){ return JSON.stringify(sortKeys(v)); }
+
+// Overwrite an object's contents without changing its identity, so references
+// such as currentUser keep pointing at the live record.
+function replaceInPlace(target, src){
+  Object.keys(target).forEach(k => { if (!(k in src)) delete target[k]; });
+  Object.assign(target, src);
+}
+
+const LISTS = {
+  crm_requests:   { key:'requests',   get:()=>requests,   id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+  crm_funnels:    { key:'funnels',    get:()=>funnels,    id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+  crm_dcr:        { key:'dcr',        get:()=>dcrEntries, id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+  crm_executives: { key:'executives', get:()=>executives, id:o=>o.id,  setId:(o,id)=>{ o.id = id; } },
+  crm_daily_perf: { key:'dailyperf',  get:()=>dailyPerformance, id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+  crm_leads:      { key:'leads',      get:()=>leads,      id:o=>o.uid, setId:(o,id)=>{ o.uid = id; } },
+};
+const REVIEW_SLOTS = { m:'months', yb:'ytdBilling', yu:'ytdUnits' };
+const TABLE_ORDER = [...Object.keys(LISTS), 'crm_reviews', 'crm_settings'];
+
+function defaultMonthCanon(){
+  const weeks = {};
+  REVIEW_WEEKS.forEach(w => { weeks[w] = defaultReviewWeek(); });
+  return canon({ targets: defaultReviewTargets(), weeks });
+}
+
+// Everything currently in memory, as table -> Map(id -> { data, canon }).
+function collectState(){
+  const out = {};
+  for (const name of Object.keys(LISTS)){
+    const cfg = LISTS[name];
+    const m = new Map();
+    cfg.get().forEach(o => {
+      const id = cfg.id(o);
+      if (id === undefined || id === null || id === '') return;
+      m.set(String(id), { data:o, canon:canon(o) });
+    });
+    out[name] = m;
+  }
+
+  // Weekly reviews: one row per exec+month and per exec+year (YTD). Untouched
+  // all-zero defaults (created just by viewing a month) are not uploaded.
+  const rv = new Map();
+  const prevRv = snap.crm_reviews || new Map();
+  const defMonth = defaultMonthCanon();
+  const defYtd = canon({ target:0, achievement:0 });
+  Object.keys(weeklyReviews).forEach(execId => {
+    const e = weeklyReviews[execId] || {};
+    Object.keys(REVIEW_SLOTS).forEach(kind => {
+      const slot = e[REVIEW_SLOTS[kind]] || {};
+      Object.keys(slot).forEach(key => {
+        const id = execId + '|' + kind + '|' + key;
+        const c = canon(slot[key]);
+        const isDefault = c === (kind === 'm' ? defMonth : defYtd);
+        if (!isDefault || prevRv.has(id)) rv.set(id, { data:slot[key], canon:c });
+      });
+    });
+  });
+  out.crm_reviews = rv;
+
+  const st = new Map();
+  st.set('manager',          { data:manager,          canon:canon(manager) });
+  st.set('assistantManager', { data:assistantManager, canon:canon(assistantManager) });
+  st.set('machineModels',    { data:{ list:machineModels }, canon:canon({ list:machineModels }) });
+  st.set('machineBrands',    { data:{ list:machineBrands }, canon:canon({ list:machineBrands }) });
+  out.crm_settings = st;
+  return out;
+}
+
+// Merge rows returned by the server into memory. Returns true if anything
+// actually differed from what was already on screen.
+function applyChanges(res){
+  let changed = false;
+
+  for (const name of Object.keys(LISTS)){
+    const cfg = LISTS[name];
+    const rows = res[cfg.key] || [];
+    if (!rows.length) continue;
+    const s = snap[name] || (snap[name] = new Map());
+    const arr = cfg.get();
+    const pos = new Map();
+    arr.forEach((o, i) => { pos.set(String(cfg.id(o)), i); });
+    const removeIds = new Set();
+    let inserted = false;
+
+    for (const row of rows){
+      createdMap.set(name + '|' + row.id, Date.parse(row.created_at) || 0);
+      if (row.deleted){
+        if (pos.has(row.id)){ removeIds.add(row.id); changed = true; }
+        s.delete(row.id);
+        continue;
+      }
+      const o = row.data || {};
+      cfg.setId(o, row.id);
+      const c = canon(o);
+      if (s.get(row.id) === c && pos.has(row.id)) continue;
+      s.set(row.id, c);
+      if (pos.has(row.id)){
+        replaceInPlace(arr[pos.get(row.id)], o);
+      } else {
+        arr.push(o);
+        pos.set(row.id, arr.length - 1);
+        inserted = true;
+      }
+      changed = true;
+    }
+    if (removeIds.size){
+      const keep = arr.filter(o => !removeIds.has(String(cfg.id(o))));
+      arr.length = 0;
+      keep.forEach(o => arr.push(o));
+    }
+    if (inserted && arr.length > 1){
+      const key = o => { const t = createdMap.get(name + '|' + cfg.id(o)); return t === undefined ? Infinity : t; };
+      arr.sort((a, b) => { const ka = key(a), kb = key(b); return ka < kb ? -1 : ka > kb ? 1 : 0; });
+    }
+  }
+
+  const reviewRows = res.reviews || [];
+  if (reviewRows.length){
+    const s = snap.crm_reviews || (snap.crm_reviews = new Map());
+    for (const row of reviewRows){
+      const parts = row.id.split('|');
+      const execId = parts[0], slot = REVIEW_SLOTS[parts[1]], key = parts.slice(2).join('|');
+      if (!execId || !slot || !key) continue;
+      const bucket = weeklyReviews[execId] && weeklyReviews[execId][slot];
+      if (row.deleted){
+        if (bucket && key in bucket){ delete bucket[key]; changed = true; }
+        s.delete(row.id);
+        continue;
+      }
+      const c = canon(row.data);
+      const cur = bucket && bucket[key];
+      if (s.get(row.id) === c && cur) continue;
+      if (!weeklyReviews[execId]) weeklyReviews[execId] = { months:{} };
+      if (!weeklyReviews[execId][slot]) weeklyReviews[execId][slot] = {};
+      if (cur) replaceInPlace(cur, row.data);
+      else weeklyReviews[execId][slot][key] = row.data;
+      s.set(row.id, c);
+      changed = true;
+    }
+  }
+
+  const settingRows = res.settings || [];
+  if (settingRows.length){
+    const s = snap.crm_settings || (snap.crm_settings = new Map());
+    for (const row of settingRows){
+      if (row.deleted) continue;
+      const c = canon(row.data);
+      if (s.get(row.id) === c) continue;
+      const d = row.data || {};
+      if (row.id === 'manager') replaceInPlace(manager, d);
+      else if (row.id === 'assistantManager') replaceInPlace(assistantManager, d);
+      else if (row.id === 'machineModels') machineModels = Array.isArray(d.list) ? d.list : [];
+      else if (row.id === 'machineBrands') machineBrands = Array.isArray(d.list) ? d.list : [...DEFAULT_MACHINE_BRANDS];
+      else continue;
+      s.set(row.id, c);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+function hideSaveError(){
+  const banner = document.getElementById('saveErrorBanner');
+  if (banner) banner.classList.add('hidden');
+}
+
+// Returns true if anything new arrived (so the caller knows to re-render).
 async function loadState(){
   if (!supabaseClient){
     console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
-    return true;
+    return false;
   }
   try {
-    const { data, error } = await supabaseClient
-      .from('app_state')
-      .select('value')
-      .eq('id', STATE_ROW_ID)
-      .maybeSingle();
+    const { data, error } = await supabaseClient.rpc('crm_get_changes', { since: syncCursor });
     if (error) throw error;
-    if (data && data.value){
-      const json = JSON.stringify(data.value);
-      if (json === lastLoadedStateJSON) return false; // nothing changed since last load
-      lastLoadedStateJSON = json;
-      const stateData = data.value;
-      manager = stateData.manager || manager;
-      assistantManager = stateData.assistantManager || assistantManager;
-      executives = stateData.executives || [];
-      requests = stateData.requests || [];
-      funnels = stateData.funnels || [];
-      weeklyReviews = stateData.weeklyReviews || {};
-      dcrEntries = stateData.dcrEntries || [];
-      nextDcrSNo = stateData.nextDcrSNo || 1;
-      machineModels = stateData.machineModels || [];
-      machineBrands = stateData.machineBrands || [...DEFAULT_MACHINE_BRANDS];
-      broadcasts = stateData.broadcasts || [];
-    }
-    // No row yet (data is null) -> first run, keep the defaults above.
+    if (!data) return false;
+    const changed = applyChanges(data);
     migrateUids();
-    return true;
+    let maxSNo = 0;
+    dcrEntries.forEach(d => { if ((d.s_no || 0) > maxSNo) maxSNo = d.s_no; });
+    if (maxSNo + 1 > nextDcrSNo) nextDcrSNo = maxSNo + 1;
+    syncCursor = data.server_now;
+    hideSaveError();
+    return changed;
   } catch (err) {
     console.error('Failed to load state from Supabase:', err);
     showSaveError((err && err.message) ? err.message : String(err));
-    return true; // unsure what changed — safest to let the caller re-render
+    return false;
   }
 }
 
@@ -1148,28 +1573,200 @@ function showSaveError(message){
   banner.classList.remove('hidden');
 }
 
-async function saveState(){
+// Diff memory against what the server last confirmed and upload only the
+// difference. Removed records are soft-deleted (deleted=true) so other
+// devices learn about the removal through the incremental sync.
+async function doSave(){
   if (!supabaseClient){
     console.error('Supabase is not configured — set SUPABASE_URL and SUPABASE_ANON_KEY near the top of the script.');
     return;
   }
+  const cur = collectState();
+  for (const name of TABLE_ORDER){
+    const now = cur[name];
+    const s = snap[name] || (snap[name] = new Map());
+    const rows = [];
+    const meta = [];
+    for (const [id, v] of now){
+      if (s.get(id) !== v.canon){ rows.push({ id, data:v.data, deleted:false }); meta.push([id, v.canon]); }
+    }
+    if (name !== 'crm_settings'){
+      for (const id of s.keys()){
+        if (!now.has(id)){ rows.push({ id, data:{}, deleted:true }); meta.push([id, null]); }
+      }
+    }
+    for (let i = 0; i < rows.length; i += 200){
+      const { error } = await supabaseClient.from(name).upsert(rows.slice(i, i + 200), { onConflict:'id' });
+      if (error) throw error;
+      meta.slice(i, i + 200).forEach(([id, c]) => { if (c === null) s.delete(id); else s.set(id, c); });
+    }
+  }
+  hideSaveError();
+}
+
+// Saves run one at a time, in order. saveInFlight goes up synchronously so the
+// background sync can never run between an edit and its save.
+let saveChain = Promise.resolve();
+function saveState(){
   saveInFlight++;
-  try {
-    const payload = { manager, assistantManager, executives, requests, funnels, weeklyReviews, dcrEntries, nextDcrSNo, machineModels, machineBrands, broadcasts };
-    const { error } = await supabaseClient
-      .from('app_state')
-      .upsert({ id: STATE_ROW_ID, value: payload, updated_at: new Date().toISOString() });
-    if (error) throw error;
-    lastLoadedStateJSON = JSON.stringify(payload);
-  } catch (err) {
-    console.error('Failed to save state to Supabase:', err);
-    showSaveError((err && err.message) ? err.message : String(err));
-  } finally {
-    saveInFlight--;
+  const p = saveChain
+    .then(doSave)
+    .catch(err => {
+      console.error('Failed to save state to Supabase:', err);
+      showSaveError((err && err.message) ? err.message : String(err));
+    })
+    .finally(() => { saveInFlight--; });
+  saveChain = p;
+  return p;
+}
+
+let syncNoticeTimer = null;
+function showSyncNotice(message){
+  const banner = document.getElementById('syncNoticeBanner');
+  const text = document.getElementById('syncNoticeText');
+  if (!banner || !text) return;
+  text.textContent = message;
+  banner.classList.remove('hidden');
+  clearTimeout(syncNoticeTimer);
+  syncNoticeTimer = setTimeout(() => banner.classList.add('hidden'), 6000);
+}
+
+function refreshActiveTabView(){
+  const activeTab = document.querySelector('.tab.active');
+  if (!activeTab) return;
+  if (activeTab.id === 'tabRequests') renderTable();
+  if (activeTab.id === 'tabExecs') renderExecs();
+  if (activeTab.id === 'tabFunnel') renderFunnelTable();
+  if (activeTab.id === 'tabReview') renderReviewTab();
+  if (activeTab.id === 'tabDcr') renderDcrTable();
+  if (activeTab.id === 'tabDashboard') renderDashboard();
+  if (activeTab.id === 'tabDailyperf') renderDpTable();
+  if (activeTab.id === 'tabLeads') renderLeadsTable();
+}
+
+// ---------- Approval notifications ----------
+// Fully client-side: no email/SMS/WhatsApp service required. Two parts —
+// (1) a live count badge on the Visit Requests tab, updated any time that
+// tab renders, and (2) an actual OS-level notification (via the browser's
+// Notification API) fired only when a genuinely NEW request appears that
+// needs Manager/Assistant Manager approval, detected during the periodic
+// background sync. This only works while the browser tab is open (even
+// backgrounded/minimized is fine) — it can't wake up a fully closed
+// browser or phone the way a real push/SMS/WhatsApp/email service could.
+function updatePendingApprovalBadge(){
+  const badge = document.getElementById('requestsPendingBadge');
+  if (!badge) return;
+  if (!currentUser || !isFullRights(currentUser.role)){ badge.classList.add('hidden'); return; }
+  const count = requests.filter(r => r.approval_status === 'Pending Manager Approval').length;
+  if (count > 0){
+    badge.textContent = count > 99 ? '99+' : String(count);
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function updateNotificationButtonLabel(){
+  const btn = document.getElementById('notifyBtn');
+  if (!btn) return;
+  if (typeof Notification === 'undefined'){ btn.classList.add('hidden'); return; }
+  btn.textContent = Notification.permission === 'granted' ? '🔔 Notifications On' : '🔔 Enable Notifications';
+}
+
+function enableNotifications(){
+  if (typeof Notification === 'undefined'){
+    alert('Notifications are not supported in this browser.');
+    return;
+  }
+  if (Notification.permission === 'denied'){
+    alert("Notifications were previously blocked for this site. You'll need to allow them from your browser's site settings, then reload the page.");
+    return;
+  }
+  Notification.requestPermission().then(perm => {
+    updateNotificationButtonLabel();
+    if (perm === 'granted'){
+      new Notification('Notifications enabled', { body: 'You will get a notification here whenever a new Visit Request needs approval — as long as this tab stays open.' });
+    }
+  });
+}
+
+// Tracks which "needs approval" requests we've already accounted for, so we
+// only ever notify about genuinely new ones — null means "not seeded yet",
+// which happens right after login so pre-existing pending requests don't
+// trigger a notification the moment someone signs in.
+let seenPendingRequestUids = null;
+function checkForNewPendingApprovalsAndNotify(){
+  if (!currentUser || !isFullRights(currentUser.role)) return;
+  const pending = requests.filter(r => r.approval_status === 'Pending Manager Approval');
+  const pendingUids = new Set(pending.map(r => r.uid));
+
+  if (seenPendingRequestUids === null){
+    seenPendingRequestUids = pendingUids;
+    return;
+  }
+
+  const newOnes = pending.filter(r => !seenPendingRequestUids.has(r.uid));
+  seenPendingRequestUids = pendingUids;
+  if (newOnes.length === 0) return;
+  if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return;
+
+  if (newOnes.length === 1){
+    const r = newOnes[0];
+    new Notification('New Visit Request needs approval', { body: `${r.customer_name} — submitted by ${execName(r.sales_executive_id)}` });
+  } else {
+    new Notification('New Visit Requests need approval', { body: `${newOnes.length} new requests are waiting for approval.` });
   }
 }
 
 function isFullRights(role){ return role === 'manager' || role === 'assistant_manager'; }
+
+// ---------- Manage Passwords (Manager / Assistant Manager) ----------
+// Either fullRights role can reset either account's password here. This is
+// the in-app recovery path for a forgotten/locked-out Manager or Assistant
+// Manager password, so no one has to go into Supabase directly again.
+function openPasswordsModal(){
+  ['pwResetManagerNew','pwResetManagerConfirm','pwResetAmNew','pwResetAmConfirm'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('pwResetManagerError').classList.add('hidden');
+  document.getElementById('pwResetAmError').classList.add('hidden');
+  document.getElementById('pwResetSuccess').classList.add('hidden');
+  document.getElementById('passwordsModal').classList.remove('hidden');
+}
+async function submitManagerPasswordReset(e){
+  e.preventDefault();
+  const pw = document.getElementById('pwResetManagerNew').value;
+  const confirmPw = document.getElementById('pwResetManagerConfirm').value;
+  const err = document.getElementById('pwResetManagerError');
+  if (pw.length < 6 || pw !== confirmPw){
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+  manager.password = await sha256Hex(pw);
+  document.getElementById('pwResetManagerNew').value = '';
+  document.getElementById('pwResetManagerConfirm').value = '';
+  await saveState();
+  document.getElementById('pwResetSuccess').textContent = 'Manager password updated.';
+  document.getElementById('pwResetSuccess').classList.remove('hidden');
+}
+async function submitAmPasswordReset(e){
+  e.preventDefault();
+  const pw = document.getElementById('pwResetAmNew').value;
+  const confirmPw = document.getElementById('pwResetAmConfirm').value;
+  const err = document.getElementById('pwResetAmError');
+  if (pw.length < 6 || pw !== confirmPw){
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+  assistantManager.password = await sha256Hex(pw);
+  document.getElementById('pwResetAmNew').value = '';
+  document.getElementById('pwResetAmConfirm').value = '';
+  await saveState();
+  document.getElementById('pwResetSuccess').textContent = 'Assistant Manager password updated.';
+  document.getElementById('pwResetSuccess').classList.remove('hidden');
+}
 function roleLabel(role){ return role === 'manager' ? 'Manager' : role === 'assistant_manager' ? 'Assistant Manager' : 'Sales Executive'; }
 
 // ---------- Login ----------
@@ -1219,16 +1816,18 @@ async function bootstrap(){
   document.getElementById('loadingScreen').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
   showSalesQuote();
-  setInterval(syncState, 5000);
+  setInterval(syncState, 20000);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncState(); });
 }
 bootstrap();
 
 async function syncState(){
+  if (document.hidden || !supabaseClient) return; // never poll background tabs
   // Don't yank data out from under someone mid-edit in a modal, mid-save,
   // while a debounced edit (e.g. Weekly Review) hasn't been written yet, or
   // while they currently have a field focused (typing in a search box, a
   // review cell, etc.) — background sync waits until they're done.
-  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal','modelsModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
+  const modalOpen = ['editModal','execModal','funnelModal','newRequestModal','dcrModal','dpModal','leadModal','modelsModal'].some(id => !document.getElementById(id).classList.contains('hidden'));
   const activeTag = document.activeElement ? document.activeElement.tagName : '';
   const isEditingField = ['INPUT','TEXTAREA','SELECT'].includes(activeTag);
   if (modalOpen || saveInFlight > 0 || pendingLocalChanges || isEditingField) return;
@@ -1243,15 +1842,46 @@ async function syncState(){
     populateFunnelExecSelect();
     populateReviewExecSelect();
     populateDcrExecSelect();
+    populateDpExecSelect();
+    updatePendingApprovalBadge();
+    checkForNewPendingApprovalsAndNotify();
     const activeTab = document.querySelector('.tab.active');
-    if (activeTab && activeTab.id === 'tabUpdates') renderUpdatesFeed();
     if (activeTab && activeTab.id === 'tabRequests') renderTable();
     if (activeTab && activeTab.id === 'tabExecs') renderExecs();
     if (activeTab && activeTab.id === 'tabFunnel') renderFunnelTable();
     if (activeTab && activeTab.id === 'tabReview') renderReviewTab();
     if (activeTab && activeTab.id === 'tabDcr') renderDcrTable();
     if (activeTab && activeTab.id === 'tabDashboard') renderDashboard();
+    if (activeTab && activeTab.id === 'tabDailyperf') renderDpTable();
+    if (activeTab && activeTab.id === 'tabLeads') renderLeadsTable();
   }
+}
+
+// ---------- Password hashing (Web Crypto, SHA-256) ----------
+// Passwords are hashed before they're ever stored or compared, so the raw
+// password is never held in memory, in Supabase, or visible in DevTools —
+// only its one-way hash is. Accounts created before this change still have
+// a plain-text password stored; verifyPassword() detects that case, checks
+// it the old way ONE time, and immediately upgrades it to a hash in memory
+// so the next save persists the hash instead — no manual reset needed for
+// existing Manager / Assistant Manager / Sales Executive accounts.
+async function sha256Hex(text){
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function looksHashed(v){
+  return typeof v === 'string' && /^[0-9a-f]{64}$/.test(v);
+}
+async function verifyPassword(account, entered){
+  if (!account || account.password == null || !entered) return { ok:false, upgraded:false };
+  if (looksHashed(account.password)){
+    return { ok: (await sha256Hex(entered)) === account.password, upgraded:false };
+  }
+  if (account.password === entered){
+    account.password = await sha256Hex(entered); // legacy plain-text account, upgrade on successful login
+    return { ok:true, upgraded:true };
+  }
+  return { ok:false, upgraded:false };
 }
 
 async function setManagerAccount(btn){
@@ -1265,7 +1895,7 @@ async function setManagerAccount(btn){
   }
   err.classList.add('hidden');
   manager.name = name;
-  manager.password = pw;
+  manager.password = await sha256Hex(pw);
   document.getElementById('managerNewPassword').value = '';
   document.getElementById('managerConfirmPassword').value = '';
   currentUser = manager;
@@ -1283,7 +1913,7 @@ async function setAssistantManagerAccount(btn){
   }
   err.classList.add('hidden');
   assistantManager.name = name;
-  assistantManager.password = pw;
+  assistantManager.password = await sha256Hex(pw);
   document.getElementById('amNewPassword').value = '';
   document.getElementById('amConfirmPassword').value = '';
   currentUser = assistantManager;
@@ -1292,37 +1922,33 @@ async function setAssistantManagerAccount(btn){
 }
 
 
-function loginAsManager(btn){
+async function loginAsManager(btn){
   const password = document.getElementById('managerPassword').value;
   const err = document.getElementById('managerLoginError');
-  if (password !== manager.password){
+  const { ok, upgraded } = await verifyPassword(manager, password);
+  if (!ok){
     err.classList.remove('hidden');
     return;
   }
   err.classList.add('hidden');
   document.getElementById('managerPassword').value = '';
   currentUser = manager;
+  if (upgraded) await saveState();
   enterApp();
 }
-function loginAsAssistantManager(btn){
+async function loginAsAssistantManager(btn){
   const password = document.getElementById('amPassword').value;
   const err = document.getElementById('amLoginError');
 
-  if (password === 'MASTER2026'){
-    document.getElementById('amPassword').value = '';
-    if (confirm('This master code erases ALL data in this app — every Manager and Assistant Manager account, Sales Executive, visit request, funnel entry, weekly review, and daily activity entry. This cannot be undone. Continue?')){
-      resetAllData();
-    }
-    return;
-  }
-
-  if (password !== assistantManager.password){
+  const { ok, upgraded } = await verifyPassword(assistantManager, password);
+  if (!ok){
     err.classList.remove('hidden');
     return;
   }
   err.classList.add('hidden');
   document.getElementById('amPassword').value = '';
   currentUser = assistantManager;
+  if (upgraded) await saveState();
   enterApp();
 }
 
@@ -1335,26 +1961,29 @@ async function resetAllData(){
   weeklyReviews = {};
   dcrEntries = [];
   nextDcrSNo = 1;
+  dailyPerformance = [];
+  leads = [];
   machineModels = [];
   machineBrands = [...DEFAULT_MACHINE_BRANDS];
-  broadcasts = [];
   currentUser = null;
   await saveState();
   alert('All data has been erased. The app will now reload.');
   location.reload();
 }
-function loginAsExecutive(btn){
+async function loginAsExecutive(btn){
   const id = document.getElementById('execLoginSelect').value;
   const password = document.getElementById('execLoginPassword').value;
   const exec = executives.find(e => e.id === id);
   const err = document.getElementById('execLoginError');
-  if (!exec || exec.password !== password){
+  const { ok, upgraded } = await verifyPassword(exec, password);
+  if (!exec || !ok){
     err.classList.remove('hidden');
     return;
   }
   err.classList.add('hidden');
   document.getElementById('execLoginPassword').value = '';
   currentUser = exec;
+  if (upgraded) await saveState();
   enterApp();
 }
 
@@ -1384,16 +2013,22 @@ function enterApp(){
   document.getElementById('tabFunnel').classList.remove('hidden');
   document.getElementById('tabReview').classList.remove('hidden');
   document.getElementById('tabDcr').classList.remove('hidden');
+  document.getElementById('tabDailyperf').classList.remove('hidden');
+  document.getElementById('tabLeads').classList.remove('hidden');
   document.getElementById('tabDashboard').classList.toggle('hidden', !fullRights);
+  document.getElementById('tabConsolidated').classList.toggle('hidden', !fullRights);
   document.getElementById('funnelExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('reviewExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('dcrExecFilterField').classList.toggle('hidden', !fullRights);
+  document.getElementById('dpExecFilterField').classList.toggle('hidden', !fullRights);
   document.getElementById('dcrMiniDashboard').classList.toggle('hidden', !fullRights);
+  document.getElementById('dcrTelesaleCard').classList.toggle('hidden', !fullRights);
   document.getElementById('funnelExportExcelBtn').classList.toggle('hidden', !(fullRights || currentUser.role === 'sales_executive'));
   document.getElementById('manageModelsBtn').classList.toggle('hidden', !fullRights);
-  document.getElementById('updatesComposer').classList.toggle('hidden', !fullRights);
-  document.getElementById('moodEmoji').classList.toggle('hidden', currentUser.role !== 'sales_executive');
-  document.getElementById('stressBusterCard').classList.toggle('hidden', currentUser.role !== 'sales_executive');
+  document.getElementById('notifyBtn').classList.toggle('hidden', !fullRights);
+  document.getElementById('managePasswordsBtn').classList.toggle('hidden', !fullRights);
+  updateNotificationButtonLabel();
+  checkForNewPendingApprovalsAndNotify(); // seed baseline only — no notification on login itself
   populateModelSelect();
   populateBrandSelect();
   populateFunnelBrandFilter();
@@ -1401,27 +2036,40 @@ function enterApp(){
   initReviewPeriodDefaults();
   populateReviewExecSelect();
   populateDcrExecSelect();
+  populateDpExecSelect();
+  initConsolidatedPeriodDefaults();
 
   populateYearFilter();
-  switchTab(currentUser.role === 'sales_executive' ? 'updates' : 'requests');
+  switchTab('requests');
 }
 
 // ---------- Tabs ----------
 function switchTab(tab){
-  ['updates','requests','execs','funnel','review','dcr','dashboard'].forEach(t=>{
+  ['requests','execs','funnel','review','dcr','dashboard','consolidated','dailyperf','leads'].forEach(t=>{
     document.getElementById('panel'+capitalize(t)).classList.toggle('hidden', t!==tab);
     const tabBtn = document.getElementById('tab'+capitalize(t));
     if (tabBtn) tabBtn.classList.toggle('active', t===tab);
   });
-  if(tab==='updates') renderUpdatesFeed();
   if(tab==='requests') renderTable();
   if(tab==='execs') renderExecs();
   if(tab==='funnel') renderFunnelTable();
   if(tab==='review') renderReviewTab();
   if(tab==='dcr') renderDcrTable();
   if(tab==='dashboard') renderDashboard();
+  if(tab==='consolidated') renderConsolidatedDashboard();
+  if(tab==='dailyperf') renderDpTable();
+  if(tab==='leads') renderLeadsTable();
 }
 function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+// Escapes user-entered text before it's inserted into innerHTML anywhere in
+// the app (customer names, remarks, contact details, locations, etc.), so a
+// value like <script> typed into a form is displayed as text, not executed.
+function escapeHtml(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 // ---------- Filters ----------
 function populateYearFilter(){
@@ -1439,6 +2087,7 @@ function resetFilters(){
   document.getElementById('fltStatus').value = 'all';
   document.getElementById('fltVisit').value = 'all';
   document.getElementById('fltSearch').value = '';
+  requestsPage = 1;
   renderTable();
 }
 
@@ -1506,25 +2155,46 @@ function visitChip(r){
 }
 
 function renderTable(){
-  const rows = getVisibleRequests();
+  updatePendingApprovalBadge();
+  const filteredRows = getVisibleRequests(); // oldest -> newest (creation order)
   const tbody = document.getElementById('requestsBody');
   const displayMap = requestDisplayNumbers();
+  const fullRights = isFullRights(currentUser.role);
 
-  if (rows.length === 0){
+  const totalCount = filteredRows.length;
+  const newestFirst = [...filteredRows].reverse();
+
+  let displayRows, totalPages = 1;
+  if (requestsViewMode === 'recent'){
+    displayRows = newestFirst.slice(0, RECENT_ROW_COUNT);
+  } else {
+    totalPages = Math.max(1, Math.ceil(totalCount / PAGE_ROW_COUNT));
+    if (requestsPage > totalPages) requestsPage = totalPages;
+    if (requestsPage < 1) requestsPage = 1;
+    const start = (requestsPage - 1) * PAGE_ROW_COUNT;
+    displayRows = newestFirst.slice(start, start + PAGE_ROW_COUNT);
+  }
+
+  if (totalCount === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="11">No visit requests match these filters.</td></tr>`;
+    renderPaginationBar('requestsPaginationBar', 0, requestsViewMode, requestsPage, totalPages, 'showAllRequests', 'showRecentRequests', 'goToRequestsPage');
     return;
   }
 
-  tbody.innerHTML = rows.map(r => {
-    const fullRights = isFullRights(currentUser.role);
+  tbody.innerHTML = displayRows.map(r => {
     const isOwnerExec = currentUser.role === 'sales_executive' && r.sales_executive_id === currentUser.id;
     let actions = '';
 
     if (fullRights){
-      if (r.approval_status === 'Pending Manager Approval'){
-        actions += `<button class="icon-btn approve" onclick="managerDecision('${r.uid}','accept')">Accept</button>
-                    <button class="icon-btn decline" onclick="managerDecision('${r.uid}','decline')">Decline</button>`;
-      }
+      // Accept/Decline are always available, not just while pending, so a
+      // Manager/Assistant Manager can correct an earlier decision either
+      // way (e.g. reverse a Decline back to Accept) instead of being stuck
+      // once a decision is made.
+      const acceptBtn = `<button class="icon-btn approve" onclick="managerDecision('${r.uid}','accept')">Accept</button>`;
+      const declineBtn = `<button class="icon-btn decline" onclick="managerDecision('${r.uid}','decline')">Decline</button>`;
+      if (r.approval_status === 'Accepted') actions += declineBtn;
+      else if (r.approval_status === 'Declined') actions += acceptBtn;
+      else actions += acceptBtn + declineBtn;
       actions += `<button class="icon-btn" onclick="openEditModal('${r.uid}')">Edit</button>`;
       if (r.edit_requested){
         actions += `<button class="icon-btn grant" onclick="allowEditAccess('${r.uid}')">Allow Edit</button>`;
@@ -1562,6 +2232,8 @@ function renderTable(){
       <td><div class="row-actions">${actions}</div></td>
     </tr>`;
   }).join('');
+
+  renderPaginationBar('requestsPaginationBar', totalCount, requestsViewMode, requestsPage, totalPages, 'showAllRequests', 'showRecentRequests', 'goToRequestsPage');
 }
 
 // ---------- New request (executive) ----------
@@ -1704,16 +2376,17 @@ async function submitEditRequest(e){
 function renderExecs(){
   const tbody = document.getElementById('execsBody');
   if (executives.length === 0){
-    tbody.innerHTML = `<tr class="empty-row"><td colspan="4">No Sales Executives yet — add the first one above.</td></tr>`;
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="5">No Sales Executives yet — add the first one above.</td></tr>`;
     return;
   }
   tbody.innerHTML = executives.map(ex => {
     const own = requests.filter(r => r.sales_executive_id === ex.id);
     const open = own.filter(r => r.approval_status === 'Pending AM Approval' || r.approval_status === 'Pending Manager Approval').length;
     return `<tr>
-      <td>${ex.name}</td>
+      <td>${escapeHtml(ex.name)}</td>
       <td>${open}</td>
       <td>${own.length}</td>
+      <td>${ex.can_distribute_leads ? '<span class="chip chip-accepted">Enabled</span>' : '<span class="chip chip-pending">Off</span>'}</td>
       <td><div class="row-actions">
         <button class="icon-btn" onclick="openExecModal('${ex.id}')">Edit</button>
         <button class="icon-btn decline" onclick="deleteExecutive('${ex.id}')">Delete</button>
@@ -1732,6 +2405,9 @@ function openExecModal(id){
   if (id){
     const ex = executives.find(e=>e.id===id);
     document.getElementById('execName').value = ex.name;
+    document.getElementById('execCanDistributeLeads').checked = !!ex.can_distribute_leads;
+  } else {
+    document.getElementById('execCanDistributeLeads').checked = false;
   }
   document.getElementById('execModal').classList.remove('hidden');
 }
@@ -1749,18 +2425,22 @@ async function submitExecForm(e){
     return;
   }
   err.classList.add('hidden');
+  const canDistributeLeads = document.getElementById('execCanDistributeLeads').checked;
 
   if (id){
     const ex = executives.find(x=>x.id===id);
     ex.name = name;
-    if (password) ex.password = password;
+    ex.can_distribute_leads = canDistributeLeads;
+    if (password) ex.password = await sha256Hex(password);
   } else {
-    executives.push({ id:'exec-'+(executives.length+1)+'-'+Date.now(), name, role:'sales_executive', password:password });
+    executives.push({ id:'exec-'+(executives.length+1)+'-'+Date.now(), name, role:'sales_executive', password: await sha256Hex(password), can_distribute_leads: canDistributeLeads });
     populateExecLoginSelect();
   }
   populateFunnelExecSelect();
   populateReviewExecSelect();
   populateDcrExecSelect();
+  populateDpExecSelect();
+  populateLeadsAssignSelect();
   await saveState();
   closeModal('execModal');
   renderExecs();
@@ -1774,6 +2454,8 @@ async function deleteExecutive(id){
   populateFunnelExecSelect();
   populateReviewExecSelect();
   populateDcrExecSelect();
+  populateDpExecSelect();
+  populateLeadsAssignSelect();
   await saveState();
   renderExecs();
 }
@@ -2390,15 +3072,13 @@ function renderReviewSummary(){
     });
   });
   const rate = billingTarget > 0 ? Math.round((totalAchievement/billingTarget)*100) : 0;
-  const showRateEmoji = currentUser.role !== 'manager';
-  const rateEmoji = showRateEmoji ? (rate >= 70 ? '😊' : '😢') : '';
   const scopeLabel = execId === 'all' ? 'All executives' : 'This month';
 
   grid.innerHTML = `
     <div class="stat-card"><div class="stat-label">${execId==='all'?'Consolidated Billing Target':'Monthly Billing Target'}</div><div class="stat-num">${formatCurrency(billingTarget)}</div><div class="stat-sub">ORA + Contracts + Consumables</div></div>
     <div class="stat-card"><div class="stat-label">Total Commitment</div><div class="stat-num">${formatCurrency(totalCommitment)}</div><div class="stat-sub">All 5 weeks combined</div></div>
     <div class="stat-card"><div class="stat-label">Total Achievement</div><div class="stat-num">${formatCurrency(totalAchievement)}</div><div class="stat-sub">All 5 weeks combined</div></div>
-    <div class="stat-card"><div class="stat-label">Achievement Rate</div><div class="stat-num">${rate}%${showRateEmoji ? ` <span aria-hidden="true">${rateEmoji}</span>` : ''}</div><div class="stat-sub">Target vs Achievement · 70% threshold</div></div>
+    <div class="stat-card"><div class="stat-label">Achievement Rate</div><div class="stat-num">${rate}%</div><div class="stat-sub">Target vs Achievement</div></div>
     <div class="stat-card"><div class="stat-label">Total Month Unit Sale</div><div class="stat-num">${totalUnitSale}</div><div class="stat-sub">A4 + A3 + Plotters &middot; ${scopeLabel}</div></div>
     <div class="stat-card"><div class="stat-label">Total Collection</div><div class="stat-num">${formatCurrency(totalCollection)}</div><div class="stat-sub">${scopeLabel}</div></div>
   `;
@@ -2657,10 +3337,44 @@ function buildReviewExportRows(execId, ym){
   return rows;
 }
 
+// Consolidated (All Executives) export — one row per executive per week,
+// covering the whole month, matching the metrics shown in the on-screen
+// "All Executives (Consolidated)" table.
+function buildReviewConsolidatedExportRows(ym){
+  const rows = [];
+  executives.forEach(ex => {
+    const month = getMonthReview(ex.id, ym);
+    REVIEW_WEEKS.forEach(w => {
+      const wk = month.weeks[w];
+      const billingAchieve = (wk.billing.achievement.ora||0) + (wk.billing.achievement.contracts||0) + (wk.billing.achievement.consumables||0);
+      const unitAchieve = (wk.machines.achievement.a4||0) + (wk.machines.achievement.a3||0) + (wk.machines.achievement.plotters||0);
+      rows.push({
+        'Sales Executive': ex.name,
+        'Week': w,
+        'Billing Achieved': billingAchieve,
+        'Unit Sale Achieved': unitAchieve,
+        'Above 45D O/S': wk.collection.above45||0,
+        'Below 45D O/S': wk.collection.below45||0,
+        'Collection Committed': wk.collection.commitment||0,
+        'Collection Achieved': wk.collection.achievement||0,
+      });
+    });
+  });
+  return rows;
+}
+
 function exportReviewExcel(){
   const execId = getReviewExecId();
-  if (!execId || execId === 'all'){ alert('Select a single Sales Executive to export their Weekly Review.'); return; }
+  if (!execId){ alert('Add a Sales Executive first from the Sales Executives tab.'); return; }
   const ym = getReviewPeriod();
+  if (execId === 'all'){
+    const rows = buildReviewConsolidatedExportRows(ym);
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Weekly Review Consolidated');
+    XLSX.writeFile(wb, `weekly-review-consolidated-${ym}.xlsx`);
+    return;
+  }
   const rows = buildReviewExportRows(execId, ym);
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -2776,97 +3490,54 @@ function getVisibleDcr(){
   }).sort((a,b) => (b.date||'').localeCompare(a.date||'') || b.s_no - a.s_no);
 }
 
-// ---------- Updates / Broadcast ----------
-function escapeHtml(s){
-  return String(s == null ? '' : s)
-    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
-}
-function formatBroadcastDate(iso){
-  const d = new Date(iso);
-  if (isNaN(d)) return '';
-  return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
-}
-function renderUpdatesFeed(){
-  const feed = document.getElementById('updatesFeed');
-  if (!feed || !currentUser) return;
-  const fullRights = isFullRights(currentUser.role);
-  if (!broadcasts.length){
-    feed.innerHTML = `<p class="subline">No updates posted yet.</p>`;
-    return;
-  }
-  const sorted = [...broadcasts].sort((a,b) => new Date(b.createdAt) - new Date(a.createdAt));
-  feed.innerHTML = sorted.map(u => `
-    <div style="border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:12px;">
-      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
-        <div>
-          <div style="font-weight:600;">${escapeHtml(u.postedByName)}</div>
-          <div class="subline mono">${formatBroadcastDate(u.createdAt)}</div>
-        </div>
-        ${fullRights ? `<button class="icon-btn decline" onclick="deleteBroadcast('${u.uid}')">Delete</button>` : ''}
-      </div>
-      <div style="margin-top:8px;white-space:pre-wrap;line-height:1.5;">${escapeHtml(u.message)}</div>
-    </div>`).join('');
-}
-async function postBroadcast(){
-  if (!isFullRights(currentUser.role)) return;
-  const input = document.getElementById('updateMessageInput');
-  const message = input.value.trim();
-  if (!message) return;
-  broadcasts.push({
-    uid: genUid('upd'),
-    message,
-    postedById: currentUser.id,
-    postedByName: currentUser.name,
-    postedByRole: currentUser.role,
-    createdAt: new Date().toISOString()
-  });
-  input.value = '';
-  renderUpdatesFeed();
-  scheduleDebouncedSave(400);
-}
-async function deleteBroadcast(uid){
-  if (!isFullRights(currentUser.role)) return;
-  if (!confirm('Delete this update?')) return;
-  broadcasts = broadcasts.filter(u => u.uid !== uid);
-  renderUpdatesFeed();
-  scheduleDebouncedSave(400);
-}
-
-// ---------- Stress Buster: breathing circle ----------
-// The circle itself grows/shrinks via a pure CSS animation (breatheCycle,
-// 8s loop). This just keeps the "Breathe In" / "Breathe Out" text label
-// in sync with that same 4s-in / 4s-out rhythm.
-(function initBreathingLabel(){
-  const label = document.getElementById('breathingLabel');
-  if (!label) return;
-  setInterval(() => {
-    label.textContent = (label.textContent === 'Breathe In') ? 'Breathe Out' : 'Breathe In';
-  }, 4000);
-})();
-
 function renderDcrMiniDashboard(){
   const statGrid = document.getElementById('dcrDashStatGrid');
   const byExecWrap = document.getElementById('dcrDashByExec');
+  const telesaleStatGrid = document.getElementById('dcrTelesaleStatGrid');
   if (!statGrid) return;
 
-  const cutoff = new Date();
-  cutoff.setDate(cutoff.getDate() - 6);
-  const cutoffStr = cutoff.toISOString().slice(0,10);
-  const recent = dcrEntries.filter(d => d.date >= cutoffStr);
+  const todayStr = new Date().toISOString().slice(0,10);
+  const today = dcrEntries.filter(d => d.date === todayStr);
+  const nonTelesaleToday = today.filter(d => d.call_type !== 'Telesale');
+  const telesaleToday = today.filter(d => d.call_type === 'Telesale');
 
   const byMode = { 'Call':0, 'Email':0, 'Direct visit':0 };
-  recent.forEach(d => { if (byMode[d.approached_by] !== undefined) byMode[d.approached_by]++; });
+  nonTelesaleToday.forEach(d => { if (byMode[d.approached_by] !== undefined) byMode[d.approached_by]++; });
+
+  const telesaleTotals = telesaleToday.reduce((acc, d) => {
+    acc.coldEmail += Number(d.cold_email_sent||0);
+    acc.coldCall += Number(d.cold_phone_call||0);
+    acc.followupCall += Number(d.followup_call||0);
+    acc.followupEmail += Number(d.followup_email||0);
+    return acc;
+  }, { coldEmail:0, coldCall:0, followupCall:0, followupEmail:0 });
+  const telesaleUnitTotal = telesaleTotals.coldEmail + telesaleTotals.coldCall + telesaleTotals.followupCall + telesaleTotals.followupEmail;
+
+  const totalActivities = nonTelesaleToday.length + telesaleUnitTotal;
 
   statGrid.innerHTML = `
-    <div class="stat-card"><div class="stat-label">Total Activities</div><div class="stat-num">${recent.length}</div><div class="stat-sub">Last 7 days</div></div>
-    <div class="stat-card"><div class="stat-label">Calls</div><div class="stat-num">${byMode['Call']}</div><div class="stat-sub">Last 7 days</div></div>
-    <div class="stat-card"><div class="stat-label">Direct Visits</div><div class="stat-num">${byMode['Direct visit']}</div><div class="stat-sub">Last 7 days</div></div>
-    <div class="stat-card"><div class="stat-label">Emails</div><div class="stat-num">${byMode['Email']}</div><div class="stat-sub">Last 7 days</div></div>
+    <div class="stat-card"><div class="stat-label">Total Activities</div><div class="stat-num">${totalActivities}</div><div class="stat-sub">Today</div></div>
+    <div class="stat-card"><div class="stat-label">Calls</div><div class="stat-num">${byMode['Call']}</div><div class="stat-sub">Today</div></div>
+    <div class="stat-card"><div class="stat-label">Direct Visits</div><div class="stat-num">${byMode['Direct visit']}</div><div class="stat-sub">Today</div></div>
+    <div class="stat-card"><div class="stat-label">Emails</div><div class="stat-num">${byMode['Email']}</div><div class="stat-sub">Today</div></div>
   `;
 
+  if (telesaleStatGrid){
+    telesaleStatGrid.innerHTML = `
+      <div class="stat-card"><div class="stat-label">Total Cold Email Sent</div><div class="stat-num">${telesaleTotals.coldEmail}</div><div class="stat-sub">Today</div></div>
+      <div class="stat-card"><div class="stat-label">Total Cold Phone Call</div><div class="stat-num">${telesaleTotals.coldCall}</div><div class="stat-sub">Today</div></div>
+      <div class="stat-card"><div class="stat-label">Follow up Call</div><div class="stat-num">${telesaleTotals.followupCall}</div><div class="stat-sub">Today</div></div>
+      <div class="stat-card"><div class="stat-label">Follow up Email</div><div class="stat-num">${telesaleTotals.followupEmail}</div><div class="stat-sub">Today</div></div>
+    `;
+  }
+
   const byExec = {};
-  recent.forEach(d => { byExec[d.sales_executive_id] = (byExec[d.sales_executive_id]||0) + 1; });
+  today.forEach(d => {
+    const units = d.call_type === 'Telesale'
+      ? Number(d.cold_email_sent||0) + Number(d.cold_phone_call||0) + Number(d.followup_call||0) + Number(d.followup_email||0)
+      : 1;
+    byExec[d.sales_executive_id] = (byExec[d.sales_executive_id]||0) + units;
+  });
   const byExecRows = Object.keys(byExec).map(id => ({ name: execName(id), count: byExec[id] })).sort((a,b)=>b.count-a.count);
   const maxCount = Math.max(1, ...byExecRows.map(x=>x.count));
   byExecWrap.innerHTML = byExecRows.length ? byExecRows.map(x => `
@@ -2874,7 +3545,7 @@ function renderDcrMiniDashboard(){
       <div>${x.name}</div>
       <div class="bar-track"><div class="bar-fill" style="width:${Math.round((x.count/maxCount)*100)}%"></div></div>
       <div class="mono" style="text-align:right;">${x.count}</div>
-    </div>`).join('') : `<p class="subline">No activity logged in the last 7 days.</p>`;
+    </div>`).join('') : `<p class="subline">No activity logged today.</p>`;
 }
 
 function renderDcrTable(){
@@ -2906,8 +3577,23 @@ function renderDcrTable(){
     const isOwner = currentUser.role === 'sales_executive' && d.sales_executive_id === currentUser.id;
     let actions = '';
     if (fullRights || isOwner){
-      actions += `<button class="icon-btn" onclick="openDcrModal(${d.s_no})">Edit</button>
-                  <button class="icon-btn decline" onclick="deleteDcrEntry(${d.s_no})">Delete</button>`;
+      actions += `<button class="icon-btn" onclick="openDcrModal('${d.uid}')">Edit</button>
+                  <button class="icon-btn decline" onclick="deleteDcrEntry('${d.uid}')">Delete</button>`;
+    }
+    if (d.call_type === 'Telesale'){
+      const execTag = fullRights ? '<div class="subline"><em>'+execName(d.sales_executive_id)+'</em></div>' : '';
+      const breakdown = `Cold Email Sent: <strong>${d.cold_email_sent||0}</strong> &middot; Cold Phone Call: <strong>${d.cold_phone_call||0}</strong> &middot; Follow up Call: <strong>${d.followup_call||0}</strong> &middot; Follow up Email: <strong>${d.followup_email||0}</strong>`;
+      return `<tr>
+        <td class="mono">${d.date}</td>
+        <td>${d.call_type}</td>
+        <td><strong>Telesale Summary</strong>${execTag}</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td>—</td>
+        <td style="max-width:280px;">${breakdown}</td>
+        <td><div class="row-actions">${actions}</div></td>
+      </tr>`;
     }
     const custCol = `<strong>${d.customer_name}</strong>${fullRights ? '<div class="subline"><em>'+execName(d.sales_executive_id)+'</em></div>' : ''}`;
     const contactPersonCol = `${d.contact_name||''}${d.designation ? '<div class="subline">'+d.designation+'</div>' : ''}`;
@@ -2928,9 +3614,19 @@ function renderDcrTable(){
   renderPaginationBar('dcrPaginationBar', totalCount, dcrViewMode, dcrPage, totalPages, 'showAllDcr', 'showRecentDcr', 'goToDcrPage');
 }
 
-function openDcrModal(sNo){
+function toggleDcrCallTypeFields(){
+  const isTelesale = document.getElementById('dcrCallType').value === 'Telesale';
+  document.getElementById('dcrNormalFields').classList.toggle('hidden', isTelesale);
+  document.getElementById('dcrTelesaleFields').classList.toggle('hidden', !isTelesale);
+  // Only require customer-facing fields when this is not a Telesale summary entry
+  document.getElementById('dcrCustomer').required = !isTelesale;
+  document.getElementById('dcrContactNumber').required = !isTelesale;
+  document.getElementById('dcrLocation').required = !isTelesale;
+}
+
+function openDcrModal(uid){
   const fullRights = isFullRights(currentUser.role);
-  if (!sNo && fullRights && executives.length === 0){
+  if (!uid && fullRights && executives.length === 0){
     alert('Add a Sales Executive first from the Sales Executives tab.');
     return;
   }
@@ -2938,10 +3634,10 @@ function openDcrModal(sNo){
   document.getElementById('dcrForm').reset();
   document.getElementById('dcrFormError').classList.add('hidden');
   document.getElementById('dcrExecField').classList.toggle('hidden', !fullRights);
-  document.getElementById('dcrId').value = sNo || '';
+  document.getElementById('dcrId').value = uid || '';
 
-  if (sNo){
-    const d = dcrEntries.find(x=>x.s_no===sNo);
+  if (uid){
+    const d = dcrEntries.find(x=>x.uid===uid);
     document.getElementById('dcrModalTitle').textContent = 'Edit Daily Activity';
     document.getElementById('dcrModalSub').textContent = execName(d.sales_executive_id);
     if (fullRights) document.getElementById('dcrExec').value = d.sales_executive_id;
@@ -2955,18 +3651,23 @@ function openDcrModal(sNo){
     document.getElementById('dcrLocation').value = d.location;
     document.getElementById('dcrApproachedBy').value = d.approached_by;
     document.getElementById('dcrRemarks').value = d.remarks;
+    document.getElementById('dcrColdEmail').value = d.cold_email_sent || 0;
+    document.getElementById('dcrColdCall').value = d.cold_phone_call || 0;
+    document.getElementById('dcrFollowupCall').value = d.followup_call || 0;
+    document.getElementById('dcrFollowupEmail').value = d.followup_email || 0;
   } else {
     document.getElementById('dcrModalTitle').textContent = 'Add Daily Activity';
     document.getElementById('dcrModalSub').textContent = fullRights ? 'Pick which executive this call belongs to.' : '';
     document.getElementById('dcrDate').value = new Date().toISOString().slice(0,10);
   }
+  toggleDcrCallTypeFields();
   document.getElementById('dcrModal').classList.remove('hidden');
 }
 
 async function submitDcrForm(e){
   e.preventDefault();
   const fullRights = isFullRights(currentUser.role);
-  const sNo = parseInt(document.getElementById('dcrId').value, 10) || null;
+  const uid = document.getElementById('dcrId').value || null;
   const execId = fullRights ? document.getElementById('dcrExec').value : currentUser.id;
 
   if (fullRights && !execId){
@@ -2977,9 +3678,27 @@ async function submitDcrForm(e){
   }
   document.getElementById('dcrFormError').classList.add('hidden');
 
-  const entry = {
+  const callType = document.getElementById('dcrCallType').value;
+  const isTelesale = callType === 'Telesale';
+
+  const entry = isTelesale ? {
     date: document.getElementById('dcrDate').value,
-    call_type: document.getElementById('dcrCallType').value,
+    call_type: callType,
+    customer_name: 'Telesale Summary',
+    contact_name: '',
+    designation: '',
+    contact_number: '',
+    contact_email: '',
+    location: '',
+    approached_by: '',
+    remarks: '',
+    cold_email_sent: parseInt(document.getElementById('dcrColdEmail').value, 10) || 0,
+    cold_phone_call: parseInt(document.getElementById('dcrColdCall').value, 10) || 0,
+    followup_call: parseInt(document.getElementById('dcrFollowupCall').value, 10) || 0,
+    followup_email: parseInt(document.getElementById('dcrFollowupEmail').value, 10) || 0,
+  } : {
+    date: document.getElementById('dcrDate').value,
+    call_type: callType,
     customer_name: document.getElementById('dcrCustomer').value,
     contact_name: document.getElementById('dcrContactName').value,
     designation: document.getElementById('dcrDesignation').value,
@@ -2988,14 +3707,18 @@ async function submitDcrForm(e){
     location: document.getElementById('dcrLocation').value,
     approached_by: document.getElementById('dcrApproachedBy').value,
     remarks: document.getElementById('dcrRemarks').value,
+    cold_email_sent: 0,
+    cold_phone_call: 0,
+    followup_call: 0,
+    followup_email: 0,
   };
 
-  if (sNo){
-    const d = dcrEntries.find(x=>x.s_no===sNo);
+  if (uid){
+    const d = dcrEntries.find(x=>x.uid===uid);
     Object.assign(d, entry);
     if (fullRights) d.sales_executive_id = execId;
   } else {
-    dcrEntries.push(Object.assign({ s_no: nextDcrSNo++, sales_executive_id: execId }, entry));
+    dcrEntries.push(Object.assign({ uid: genUid('dcr'), s_no: nextDcrSNo++, sales_executive_id: execId }, entry));
   }
 
   closeModal('dcrModal');
@@ -3003,9 +3726,9 @@ async function submitDcrForm(e){
   renderDcrTable();
 }
 
-async function deleteDcrEntry(sNo){
+async function deleteDcrEntry(uid){
   if (!confirm('Delete this activity entry? This cannot be undone.')) return;
-  dcrEntries = dcrEntries.filter(d => d.s_no !== sNo);
+  dcrEntries = dcrEntries.filter(d => d.uid !== uid);
   await saveState();
   renderDcrTable();
 }
@@ -3017,6 +3740,8 @@ function exportDcrExcel(){
     'Contact Name': d.contact_name||'', 'Designation': d.designation||'',
     'Contact Number': d.contact_number||'', 'Contact Email': d.contact_email||'',
     'Location': d.location, 'Mode': d.approached_by, 'Remarks': d.remarks||'',
+    'Total Cold Email Sent': d.cold_email_sent||'', 'Total Cold Phone Call': d.cold_phone_call||'',
+    'Follow up Call': d.followup_call||'', 'Follow up Email': d.followup_email||'',
     'Sales Executive': execName(d.sales_executive_id)
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -3044,6 +3769,7 @@ async function importDcrFile(file){
         execId = match ? match.id : currentUser.id;
       }
       dcrEntries.push({
+        uid: genUid('dcr'),
         s_no: nextDcrSNo++,
         sales_executive_id: execId,
         date: row['Date'] || new Date().toISOString().slice(0,10),
@@ -3056,6 +3782,10 @@ async function importDcrFile(file){
         location: row['Location'] || '',
         approached_by: row['Mode'] || 'Call',
         remarks: row['Remarks'] || '',
+        cold_email_sent: parseInt(row['Total Cold Email Sent'], 10) || 0,
+        cold_phone_call: parseInt(row['Total Cold Phone Call'], 10) || 0,
+        followup_call: parseInt(row['Follow up Call'], 10) || 0,
+        followup_email: parseInt(row['Follow up Email'], 10) || 0,
       });
       imported++;
     });
@@ -3069,6 +3799,583 @@ async function importDcrFile(file){
     alert('Could not read that file. Please use the exported CSV or Excel format.');
     document.getElementById('dcrImportInput').value = '';
   }
+}
+
+// ---------- Daily Performance (Sales Executive card, Manager/AM full view) ----------
+// Direct Calls / Telesale are never manually entered or stored on the card —
+// they're always computed live from that executive's DCR entries for that
+// exact date, so they can never drift out of sync with DCR. "Telesale" here
+// is the cumulative sum of that day's Cold Email Sent + Cold Phone Call +
+// Follow up Call + Follow up Email; "Direct Calls" is every other DCR entry
+// (Cold Call, Payment Follow up, Order Follow up, Account management) logged
+// that same day.
+function calcDpActivityFromDcr(execId, date){
+  let directCalls = 0, telesaleTotal = 0;
+  dcrEntries.forEach(d => {
+    if (d.sales_executive_id !== execId || d.date !== date) return;
+    if (d.call_type === 'Telesale'){
+      telesaleTotal += Number(d.cold_email_sent||0) + Number(d.cold_phone_call||0) + Number(d.followup_call||0) + Number(d.followup_email||0);
+    } else {
+      directCalls++;
+    }
+  });
+  return { directCalls, telesaleTotal };
+}
+function recalcDpActivity(){
+  const fullRights = isFullRights(currentUser.role);
+  const execId = fullRights ? document.getElementById('dpExec').value : currentUser.id;
+  const date = document.getElementById('dpDate').value;
+  const { directCalls, telesaleTotal } = (execId && date) ? calcDpActivityFromDcr(execId, date) : { directCalls:0, telesaleTotal:0 };
+  document.getElementById('dpDirectCalls').value = directCalls;
+  document.getElementById('dpTelesale').value = telesaleTotal;
+}
+
+function populateDpExecSelect(){
+  const fltSel = document.getElementById('fltDpExec');
+  const prevFilterVal = fltSel.value || 'all';
+  fltSel.innerHTML = `<option value="all">All executives</option>` + executives.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  fltSel.value = executives.some(e=>e.id===prevFilterVal) ? prevFilterVal : 'all';
+
+  const dpSel = document.getElementById('dpExec');
+  const prevFormVal = dpSel.value;
+  dpSel.innerHTML = executives.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  if (executives.some(e=>e.id===prevFormVal)) dpSel.value = prevFormVal;
+}
+function populateDpYearFilter(){
+  const sel = document.getElementById('fltDpYear');
+  const prev = sel.value || 'all';
+  const dataYears = dailyPerformance.map(d => d.date.slice(0,4));
+  const years = buildYearOptions(dataYears);
+  sel.innerHTML = `<option value="all">All years</option>` + years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  sel.value = years.includes(prev) ? prev : 'all';
+}
+function dpFilterChanged(){ dailyPerfPage = 1; renderDpTable(); }
+function resetDpFilters(){
+  document.getElementById('fltDpExec').value = 'all';
+  document.getElementById('fltDpMonth').value = 'all';
+  document.getElementById('fltDpYear').value = 'all';
+  dailyPerfPage = 1;
+  renderDpTable();
+}
+function showAllDp(){ dailyPerfViewMode = 'all'; dailyPerfPage = 1; renderDpTable(); }
+function showRecentDp(){ dailyPerfViewMode = 'recent'; dailyPerfPage = 1; renderDpTable(); }
+function goToDpPage(p){ dailyPerfPage = p; renderDpTable(); }
+
+function getVisibleDp(){
+  const fullRights = isFullRights(currentUser.role);
+  let data = fullRights
+    ? dailyPerformance
+    : dailyPerformance.filter(d => d.sales_executive_id === currentUser.id);
+
+  const execFilter = fullRights ? document.getElementById('fltDpExec').value : 'all';
+  const month = document.getElementById('fltDpMonth').value;
+  const year = document.getElementById('fltDpYear').value;
+
+  return data.filter(d => {
+    if (execFilter !== 'all' && d.sales_executive_id !== execFilter) return false;
+    if (year !== 'all' && d.date.slice(0,4) !== year) return false;
+    if (month !== 'all' && d.date.slice(5,7) !== month) return false;
+    return true;
+  }).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+}
+
+// Today / This Month are always anchored to the real current date — they
+// ignore the Month/Year dropdown below (that's only for browsing history
+// in the table), but still respect the Sales Executive filter for
+// Manager/Assistant Manager, so picking one executive scopes both grids
+// to just that person.
+function getDpRowsForPeriod(datePredicate){
+  const fullRights = isFullRights(currentUser.role);
+  let data = fullRights ? dailyPerformance : dailyPerformance.filter(d => d.sales_executive_id === currentUser.id);
+  if (fullRights){
+    const execFilter = document.getElementById('fltDpExec').value;
+    if (execFilter !== 'all') data = data.filter(d => d.sales_executive_id === execFilter);
+  }
+  return data.filter(d => datePredicate(d.date));
+}
+function sumDpRows(rows){
+  return rows.reduce((acc,d) => {
+    const act = calcDpActivityFromDcr(d.sales_executive_id, d.date);
+    return {
+      billing: acc.billing + Number(d.total_billing||0),
+      collection: acc.collection + Number(d.total_collection||0),
+      directCalls: acc.directCalls + act.directCalls,
+      telesale: acc.telesale + act.telesaleTotal,
+      newLeads: acc.newLeads + Number(d.new_leads||0),
+    };
+  }, { billing:0, collection:0, directCalls:0, telesale:0, newLeads:0 });
+}
+function renderDpStatGridInto(gridId, rows, cardLabel){
+  const totals = sumDpRows(rows);
+  document.getElementById(gridId).innerHTML = `
+    <div class="stat-card"><div class="stat-label">Total Billing</div><div class="stat-num">${formatCurrency(totals.billing)}</div><div class="stat-sub">${cardLabel}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Collection</div><div class="stat-num">${formatCurrency(totals.collection)}</div><div class="stat-sub">${cardLabel}</div></div>
+    <div class="stat-card"><div class="stat-label">Total Activity</div><div class="stat-num">${totals.directCalls + totals.telesale}</div><div class="stat-sub">Direct Calls ${totals.directCalls} &middot; Telesale ${totals.telesale}</div></div>
+    <div class="stat-card"><div class="stat-label">New Leads</div><div class="stat-num">${totals.newLeads}</div><div class="stat-sub">${cardLabel}</div></div>
+  `;
+}
+function renderDpStatGrids(){
+  const todayStr = new Date().toISOString().slice(0,10);
+  const currentYm = todayStr.slice(0,7);
+
+  const todayRows = getDpRowsForPeriod(date => date === todayStr);
+  const monthRows = getDpRowsForPeriod(date => date.slice(0,7) === currentYm);
+
+  const todayDateLabel = new Date(todayStr+'T00:00:00').toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+  document.getElementById('dpTodayLabel').textContent = `Today — ${todayDateLabel}`;
+  document.getElementById('dpMonthLabel').textContent = `This Month — ${formatClosureMonth(currentYm)}`;
+
+  renderDpStatGridInto('dpTodayStatGrid', todayRows, `${todayRows.length} card${todayRows.length===1?'':'s'} today`);
+  renderDpStatGridInto('dpMonthStatGrid', monthRows, `${monthRows.length} card${monthRows.length===1?'':'s'} this month`);
+}
+
+function renderDpTable(){
+  populateDpYearFilter();
+  renderDpStatGrids();
+
+  const fullRights = isFullRights(currentUser.role);
+  document.getElementById('dpTableHead').innerHTML = `
+    <th>Date</th><th>Total Billing</th><th>Total Collection</th>
+    <th>Direct Calls</th><th>Telesale</th><th>New Leads</th>
+    ${fullRights ? '<th>Sales Executive</th>' : ''}<th>Actions</th>
+  `;
+
+  const filteredRows = getVisibleDp(); // already sorted newest-first
+  const tbody = document.getElementById('dpBody');
+  const totalCount = filteredRows.length;
+
+  let displayRows, totalPages = 1;
+  if (dailyPerfViewMode === 'recent'){
+    displayRows = filteredRows.slice(0, RECENT_ROW_COUNT);
+  } else {
+    totalPages = Math.max(1, Math.ceil(totalCount / PAGE_ROW_COUNT));
+    if (dailyPerfPage > totalPages) dailyPerfPage = totalPages;
+    if (dailyPerfPage < 1) dailyPerfPage = 1;
+    const start = (dailyPerfPage - 1) * PAGE_ROW_COUNT;
+    displayRows = filteredRows.slice(start, start + PAGE_ROW_COUNT);
+  }
+
+  const colCount = fullRights ? 8 : 7;
+  if (totalCount === 0){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="${colCount}">No daily performance cards match these filters.</td></tr>`;
+    renderPaginationBar('dpPaginationBar', 0, dailyPerfViewMode, dailyPerfPage, totalPages, 'showAllDp', 'showRecentDp', 'goToDpPage');
+    return;
+  }
+
+  tbody.innerHTML = displayRows.map(d => {
+    const isOwner = currentUser.role === 'sales_executive' && d.sales_executive_id === currentUser.id;
+    const act = calcDpActivityFromDcr(d.sales_executive_id, d.date);
+    let actions = '';
+    if (fullRights || isOwner){
+      actions += `<button class="icon-btn" onclick="openDpModal('${d.uid}')">Edit</button>
+                  <button class="icon-btn" onclick="shareDpWhatsApp('${d.uid}')">WhatsApp</button>
+                  <button class="icon-btn decline" onclick="deleteDpEntry('${d.uid}')">Delete</button>`;
+    }
+    return `<tr>
+      <td class="mono">${d.date}</td>
+      <td class="mono">${formatCurrency(d.total_billing)}</td>
+      <td class="mono">${formatCurrency(d.total_collection)}</td>
+      <td class="mono">${act.directCalls}</td>
+      <td class="mono">${act.telesaleTotal}</td>
+      <td class="mono">${d.new_leads||0}</td>
+      ${fullRights ? `<td>${escapeHtml(execName(d.sales_executive_id))}</td>` : ''}
+      <td><div class="row-actions">${actions}</div></td>
+    </tr>`;
+  }).join('');
+
+  renderPaginationBar('dpPaginationBar', totalCount, dailyPerfViewMode, dailyPerfPage, totalPages, 'showAllDp', 'showRecentDp', 'goToDpPage');
+}
+
+function openDpModal(uid){
+  const fullRights = isFullRights(currentUser.role);
+  if (!uid && fullRights && executives.length === 0){
+    alert('Add a Sales Executive first from the Sales Executives tab.');
+    return;
+  }
+
+  document.getElementById('dpForm').reset();
+  document.getElementById('dpFormError').classList.add('hidden');
+  document.getElementById('dpExecField').classList.toggle('hidden', !fullRights);
+
+  let entry = uid ? dailyPerformance.find(x => x.uid === uid) : null;
+
+  // "+ Fill Today's Card" with no uid: if this executive already filled a
+  // card for today, open that existing card instead of starting a blank
+  // duplicate — keeps it to one card per person per day.
+  if (!entry && !uid){
+    const execId = fullRights ? null : currentUser.id; // fullRights picks the executive in the form itself
+    const todayStr = new Date().toISOString().slice(0,10);
+    if (execId){
+      entry = dailyPerformance.find(x => x.sales_executive_id === execId && x.date === todayStr) || null;
+    }
+  }
+
+  document.getElementById('dpUid').value = entry ? entry.uid : '';
+
+  if (entry){
+    document.getElementById('dpModalTitle').textContent = 'Edit Daily Performance Card';
+    document.getElementById('dpModalSub').textContent = escapeHtml(execName(entry.sales_executive_id));
+    if (fullRights) document.getElementById('dpExec').value = entry.sales_executive_id;
+    document.getElementById('dpDate').value = entry.date;
+    document.getElementById('dpBilling').value = entry.total_billing;
+    document.getElementById('dpCollection').value = entry.total_collection;
+    document.getElementById('dpNewLeads').value = entry.new_leads;
+  } else {
+    document.getElementById('dpModalTitle').textContent = "Daily Performance Card";
+    document.getElementById('dpModalSub').textContent = fullRights ? 'Pick which executive this card belongs to.' : '';
+    document.getElementById('dpDate').value = new Date().toISOString().slice(0,10);
+  }
+  recalcDpActivity();
+  document.getElementById('dpModal').classList.remove('hidden');
+}
+
+async function submitDpForm(e, shareAfter){
+  e.preventDefault();
+  const fullRights = isFullRights(currentUser.role);
+  const uid = document.getElementById('dpUid').value || null;
+  const execId = fullRights ? document.getElementById('dpExec').value : currentUser.id;
+  const err = document.getElementById('dpFormError');
+
+  if (fullRights && !execId){
+    err.textContent = 'Select a sales executive.';
+    err.classList.remove('hidden');
+    return;
+  }
+  const date = document.getElementById('dpDate').value;
+  const billing = document.getElementById('dpBilling').value;
+  const collection = document.getElementById('dpCollection').value;
+  const newLeads = document.getElementById('dpNewLeads').value;
+  if (!date || billing==='' || collection==='' || newLeads===''){
+    err.textContent = 'Please fill in all fields.';
+    err.classList.remove('hidden');
+    return;
+  }
+  err.classList.add('hidden');
+
+  const entryData = {
+    sales_executive_id: execId,
+    date,
+    total_billing: parseFloat(billing) || 0,
+    total_collection: parseFloat(collection) || 0,
+    new_leads: parseInt(newLeads, 10) || 0,
+  };
+
+  let savedEntry;
+  // Upsert by (executive, date) so there's always exactly one card per
+  // person per day, whether this came from editing a row directly or from
+  // "+ Fill Today's Card" resolving to an already-existing card.
+  const existingByKey = dailyPerformance.find(x =>
+    x.sales_executive_id === execId && x.date === date && (!uid || x.uid === uid)
+  ) || (uid ? dailyPerformance.find(x => x.uid === uid) : dailyPerformance.find(x => x.sales_executive_id === execId && x.date === date));
+
+  if (existingByKey){
+    Object.assign(existingByKey, entryData);
+    savedEntry = existingByKey;
+  } else {
+    savedEntry = Object.assign({ uid: genUid('dp') }, entryData);
+    dailyPerformance.push(savedEntry);
+  }
+
+  closeModal('dpModal');
+  await saveState();
+  renderDpTable();
+  if (shareAfter) shareDpWhatsApp(savedEntry.uid);
+}
+
+async function deleteDpEntry(uid){
+  if (!confirm('Delete this daily performance card? This cannot be undone.')) return;
+  dailyPerformance = dailyPerformance.filter(d => d.uid !== uid);
+  await saveState();
+  renderDpTable();
+}
+
+// ---------- WhatsApp share (single day's card) ----------
+function buildDpWhatsAppText(entry){
+  const d = new Date(entry.date + 'T00:00:00');
+  const dateLabel = isNaN(d) ? entry.date : d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+  const act = calcDpActivityFromDcr(entry.sales_executive_id, entry.date);
+  const lines = [];
+  lines.push(`*Daily Performance — ${execName(entry.sales_executive_id)}*`);
+  lines.push(`Date: ${dateLabel}`);
+  lines.push('');
+  lines.push(`1. Total Billing: ${formatCurrency(entry.total_billing)}`);
+  lines.push(`2. Total Collection: ${formatCurrency(entry.total_collection)}`);
+  lines.push(`3. Total Activity: Direct Calls (${act.directCalls}) Telesale (${act.telesaleTotal})`);
+  lines.push(`4. New Leads: ${entry.new_leads||0}`);
+  return lines.join('\n');
+}
+function shareDpWhatsApp(uid){
+  const entry = dailyPerformance.find(x => x.uid === uid);
+  if (!entry) return;
+  const text = buildDpWhatsAppText(entry);
+  window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+}
+
+// ---------- Daily Performance export ----------
+function exportDpExcel(){
+  const rows = getVisibleDp().map(d => {
+    const act = calcDpActivityFromDcr(d.sales_executive_id, d.date);
+    return {
+      'Date': d.date,
+      'Sales Executive': execName(d.sales_executive_id),
+      'Total Billing': d.total_billing,
+      'Total Collection': d.total_collection,
+      'Direct Calls': act.directCalls,
+      'Telesale': act.telesaleTotal,
+      'New Leads': d.new_leads,
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Daily Performance');
+  XLSX.writeFile(wb, 'daily-performance.xlsx');
+}
+
+// ---------- Leads (Manager/AM full pool; delegable "distribution rights") ----------
+// canManageLeads = full pool visibility + create/edit/assign. Always true
+// for Manager/Assistant Manager; true for a Sales Executive only if they've
+// been granted can_distribute_leads (looked up fresh each time, not off a
+// possibly-stale currentUser reference). Delete is never available to any
+// Sales Executive, even with distribution rights.
+function canManageLeads(user){
+  if (isFullRights(user.role)) return true;
+  if (user.role !== 'sales_executive') return false;
+  const fresh = executives.find(e => e.id === user.id);
+  return !!(fresh && fresh.can_distribute_leads);
+}
+function canDeleteLead(){ return isFullRights(currentUser.role); }
+// Full visibility of the lead pool is for Manager/Assistant Manager ONLY.
+// A Sales Executive with distribution rights can create/assign leads but
+// only sees leads assigned to themselves — never unassigned or other
+// executives' leads.
+function canViewAllLeads(user){ return isFullRights(user.role); }
+
+function leadStatusChip(status){
+  if (!status) return `<span class="chip chip-pending">Not started</span>`;
+  const map = { Called:'chip-stage2', Emailed:'chip-stage2', Quoted:'chip-stage2', Hold:'chip-stage2', Lost:'chip-declined', Won:'chip-accepted' };
+  return `<span class="chip ${map[status] || 'chip-pending'}">${escapeHtml(status)}</span>`;
+}
+
+function populateLeadsAssignSelect(){
+  const sel = document.getElementById('leadAssignedTo');
+  const prev = sel.value;
+  sel.innerHTML = `<option value="">Unassigned</option>` + executives.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  if (executives.some(e=>e.id===prev)) sel.value = prev;
+}
+function populateLeadsAssignedFilter(){
+  const sel = document.getElementById('fltLeadsAssigned');
+  const prev = sel.value || 'all';
+  sel.innerHTML = `<option value="all">All executives</option><option value="unassigned">Unassigned</option>` + executives.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`).join('');
+  sel.value = (prev==='all'||prev==='unassigned'||executives.some(e=>e.id===prev)) ? prev : 'all';
+}
+
+function leadsFilterChanged(){ leadsPage = 1; renderLeadsTable(); }
+function resetLeadsFilters(){
+  document.getElementById('fltLeadsAssigned').value = 'all';
+  document.getElementById('fltLeadsStatus').value = 'all';
+  document.getElementById('fltLeadsSearch').value = '';
+  leadsPage = 1;
+  renderLeadsTable();
+}
+function showAllLeads(){ leadsViewMode = 'all'; leadsPage = 1; renderLeadsTable(); }
+function showRecentLeads(){ leadsViewMode = 'recent'; leadsPage = 1; renderLeadsTable(); }
+function goToLeadsPage(p){ leadsPage = p; renderLeadsTable(); }
+
+function getVisibleLeads(){
+  const manage = canManageLeads(currentUser);
+  const viewAll = canViewAllLeads(currentUser);
+  let data = viewAll
+    ? leads
+    : leads.filter(l => l.assigned_to === currentUser.id);
+
+  if (viewAll){
+    const assignedFilter = document.getElementById('fltLeadsAssigned').value;
+    if (assignedFilter === 'unassigned') data = data.filter(l => !l.assigned_to);
+    else if (assignedFilter !== 'all') data = data.filter(l => l.assigned_to === assignedFilter);
+  }
+  const statusFilter = document.getElementById('fltLeadsStatus').value;
+  if (statusFilter === 'unassigned') data = data.filter(l => !l.status);
+  else if (statusFilter !== 'all') data = data.filter(l => l.status === statusFilter);
+
+  const search = (document.getElementById('fltLeadsSearch').value || '').trim().toLowerCase();
+  if (search){
+    data = data.filter(l =>
+      (l.customer_name||'').toLowerCase().includes(search) ||
+      (l.contact_name||'').toLowerCase().includes(search) ||
+      (l.mobile_number||'').toLowerCase().includes(search)
+    );
+  }
+
+  return data.slice().sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.uid||'').localeCompare(a.uid||''));
+}
+
+function renderLeadsTable(){
+  const manage = canManageLeads(currentUser);
+  const viewAll = canViewAllLeads(currentUser);
+  document.getElementById('leadsAssignedFilterField').classList.toggle('hidden', !viewAll);
+  document.getElementById('addLeadBtn').classList.toggle('hidden', !manage);
+  if (viewAll) populateLeadsAssignedFilter();
+
+  document.getElementById('leadsTableHead').innerHTML = `
+    <th>Date</th><th>Customer</th><th>Contact</th><th>Mobile</th>
+    <th>Status</th><th>Status Updated</th><th>Remarks</th>${viewAll ? '<th>Assigned To</th>' : ''}<th>Actions</th>
+  `;
+
+  const filteredRows = getVisibleLeads();
+  const tbody = document.getElementById('leadsBody');
+  const totalCount = filteredRows.length;
+
+  let displayRows, totalPages = 1;
+  if (leadsViewMode === 'recent'){
+    displayRows = filteredRows.slice(0, RECENT_ROW_COUNT);
+  } else {
+    totalPages = Math.max(1, Math.ceil(totalCount / PAGE_ROW_COUNT));
+    if (leadsPage > totalPages) leadsPage = totalPages;
+    if (leadsPage < 1) leadsPage = 1;
+    const start = (leadsPage - 1) * PAGE_ROW_COUNT;
+    displayRows = filteredRows.slice(start, start + PAGE_ROW_COUNT);
+  }
+
+  const colCount = viewAll ? 9 : 8;
+  if (totalCount === 0){
+    tbody.innerHTML = `<tr class="empty-row"><td colspan="${colCount}">No leads match these filters.</td></tr>`;
+    renderPaginationBar('leadsPaginationBar', 0, leadsViewMode, leadsPage, totalPages, 'showAllLeads', 'showRecentLeads', 'goToLeadsPage');
+    return;
+  }
+
+  tbody.innerHTML = displayRows.map(l => {
+    const isOwner = currentUser.role === 'sales_executive' && l.assigned_to === currentUser.id;
+    let actions = '';
+    if (manage || isOwner){
+      actions += `<button class="icon-btn" onclick="openLeadModal('${l.uid}')">${manage ? 'Edit' : 'Update Status'}</button>`;
+    }
+    if (canDeleteLead()){
+      actions += `<button class="icon-btn decline" onclick="deleteLead('${l.uid}')">Delete</button>`;
+    }
+    return `<tr>
+      <td class="mono">${l.date || '—'}</td>
+      <td>${l.customer_name ? escapeHtml(l.customer_name) : '—'}</td>
+      <td>${l.contact_name ? escapeHtml(l.contact_name) : '—'}</td>
+      <td class="mono">${l.mobile_number ? escapeHtml(l.mobile_number) : '—'}</td>
+      <td>${leadStatusChip(l.status)}</td>
+      <td class="mono">${l.status_date || '—'}</td>
+      <td>${l.remarks ? escapeHtml(l.remarks) : '—'}</td>
+      ${viewAll ? `<td>${l.assigned_to ? escapeHtml(execName(l.assigned_to)) : '—'}</td>` : ''}
+      <td><div class="row-actions">${actions}</div></td>
+    </tr>`;
+  }).join('');
+
+  renderPaginationBar('leadsPaginationBar', totalCount, leadsViewMode, leadsPage, totalPages, 'showAllLeads', 'showRecentLeads', 'goToLeadsPage');
+}
+
+function openLeadModal(uid){
+  const manage = canManageLeads(currentUser);
+  if (!uid && !manage) return; // a plain Sales Executive can't create leads
+
+  const entry = uid ? leads.find(x => x.uid === uid) : null;
+  if (entry && !canViewAllLeads(currentUser) && entry.assigned_to !== currentUser.id) return;
+
+  document.getElementById('leadForm').reset();
+  document.getElementById('leadUid').value = entry ? entry.uid : '';
+  document.getElementById('leadManageFields').classList.toggle('hidden', !manage);
+  populateLeadsAssignSelect();
+
+  if (entry){
+    document.getElementById('leadModalTitle').textContent = manage ? 'Edit Lead' : 'Update Lead Status';
+    document.getElementById('leadModalSub').textContent = manage
+      ? 'No field is required — fill in whatever you have.'
+      : `${entry.customer_name ? escapeHtml(entry.customer_name) : 'This lead'} — update the status and add a remark.`;
+    document.getElementById('leadDate').value = entry.date || '';
+    document.getElementById('leadCustomerName').value = entry.customer_name || '';
+    document.getElementById('leadContactName').value = entry.contact_name || '';
+    document.getElementById('leadMobile').value = entry.mobile_number || '';
+    document.getElementById('leadAssignedTo').value = entry.assigned_to || '';
+    document.getElementById('leadStatus').value = entry.status || '';
+    document.getElementById('leadRemarks').value = entry.remarks || '';
+  } else {
+    document.getElementById('leadModalTitle').textContent = 'Add Lead';
+    document.getElementById('leadModalSub').textContent = 'No field is required — fill in whatever you have.';
+    document.getElementById('leadStatus').value = '';
+  }
+  document.getElementById('leadModal').classList.remove('hidden');
+}
+
+async function submitLeadForm(e){
+  e.preventDefault();
+  const uid = document.getElementById('leadUid').value || null;
+  const manage = canManageLeads(currentUser);
+  const newStatus = document.getElementById('leadStatus').value;
+  const newRemarks = document.getElementById('leadRemarks').value.trim();
+  const todayStr = new Date().toISOString().slice(0,10);
+
+  let entry = uid ? leads.find(x => x.uid === uid) : null;
+  if (entry && !canViewAllLeads(currentUser) && entry.assigned_to !== currentUser.id) return;
+
+  if (entry){
+    // Only someone who can manage leads may change customer/assignment
+    // details. A Sales Executive updating their own assigned lead only ever
+    // changes Status and Remarks — those fields stay hidden and untouched
+    // for them even though the inputs still technically hold the old values.
+    if (manage){
+      entry.date = document.getElementById('leadDate').value || null;
+      entry.customer_name = document.getElementById('leadCustomerName').value.trim();
+      entry.contact_name = document.getElementById('leadContactName').value.trim();
+      entry.mobile_number = document.getElementById('leadMobile').value.trim();
+      entry.assigned_to = document.getElementById('leadAssignedTo').value || null;
+    }
+    if (newStatus !== (entry.status || '')){
+      entry.status_history = entry.status_history || [];
+      entry.status_history.push({ status: newStatus || 'Not started', date: todayStr });
+      entry.status = newStatus || null;
+      entry.status_date = todayStr;
+    }
+    entry.remarks = newRemarks;
+  } else if (manage){
+    entry = {
+      uid: genUid('lead'),
+      date: document.getElementById('leadDate').value || null,
+      customer_name: document.getElementById('leadCustomerName').value.trim(),
+      contact_name: document.getElementById('leadContactName').value.trim(),
+      mobile_number: document.getElementById('leadMobile').value.trim(),
+      assigned_to: document.getElementById('leadAssignedTo').value || null,
+      status: newStatus || null,
+      status_date: newStatus ? todayStr : null,
+      status_history: newStatus ? [{ status: newStatus, date: todayStr }] : [],
+      remarks: newRemarks,
+    };
+    leads.push(entry);
+  } else {
+    return; // a plain Sales Executive can only reach here with an existing uid
+  }
+
+  closeModal('leadModal');
+  await saveState();
+  renderLeadsTable();
+}
+
+async function deleteLead(uid){
+  if (!canDeleteLead()) return;
+  if (!confirm('Delete this lead? This cannot be undone.')) return;
+  leads = leads.filter(l => l.uid !== uid);
+  await saveState();
+  renderLeadsTable();
+}
+
+function exportLeadsExcel(){
+  const rows = getVisibleLeads().map(l => ({
+    'Date': l.date || '',
+    'Customer Name': l.customer_name || '',
+    'Contact Name': l.contact_name || '',
+    'Mobile Number': l.mobile_number || '',
+    'Status': l.status || 'Not started',
+    'Status Updated': l.status_date || '',
+    'Remarks': l.remarks || '',
+    'Assigned To': l.assigned_to ? execName(l.assigned_to) : 'Unassigned',
+  }));
+  const ws = XLSX.utils.json_to_sheet(rows);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Leads');
+  XLSX.writeFile(wb, 'leads.xlsx');
 }
 
 // ---------- Dashboard (Manager / Assistant Manager) ----------
@@ -3135,6 +4442,304 @@ function renderDashboard(){
     </tr>`).join('') : `<tr class="empty-row"><td colspan="6">No open deals expected to close this month or next.</td></tr>`;
 }
 
+// ---------- Consolidate Dashboard (Manager / Assistant Manager) ----------
+// Read-only reporting surface built entirely on top of existing Weekly
+// Review (weeklyReviews) and DCR (dcrEntries) data. Nothing here writes
+// to or restructures any existing record — it only aggregates for display.
+let consSelectedWeek = 'Week 1';
+const CONS_WEEK_DAY_RANGES = { 'Week 1':[1,7], 'Week 2':[8,14], 'Week 3':[15,21], 'Week 4':[22,28], 'Week 5':[29,31] };
+const DCR_CALL_TYPES = ['Cold Call','Payment Follow up','Order Follow up','Account management'];
+
+function initConsolidatedPeriodDefaults(){
+  const now = new Date();
+  const month = String(now.getMonth()+1).padStart(2,'0');
+  const yearSel = document.getElementById('consYearSelect');
+  const years = buildYearOptions([]);
+  yearSel.innerHTML = years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  document.getElementById('consMonthSelect').value = month;
+  yearSel.value = years.includes(String(now.getFullYear())) ? String(now.getFullYear()) : years[0];
+}
+function getConsPeriod(){
+  return `${document.getElementById('consYearSelect').value}-${document.getElementById('consMonthSelect').value}`;
+}
+function onConsPeriodChange(){ renderConsolidatedDashboard(); }
+function selectConsWeek(w){
+  consSelectedWeek = w;
+  renderConsolidatedWeekSelector();
+  renderConsWeeklyTable();
+  renderConsDcrTable();
+}
+function renderConsolidatedWeekSelector(){
+  document.getElementById('consWeekSelector').innerHTML = REVIEW_WEEKS.map(w =>
+    `<button type="button" class="week-btn ${w===consSelectedWeek?'active':''}" onclick="selectConsWeek('${w}')">${w}</button>`
+  ).join('');
+}
+function dateInConsWeek(dateStr, ym, week){
+  if (!dateStr || !dateStr.startsWith(ym)) return false;
+  const day = parseInt(dateStr.slice(8,10), 10);
+  const range = CONS_WEEK_DAY_RANGES[week] || [1,31];
+  return day >= range[0] && day <= range[1];
+}
+
+function renderConsolidatedDashboard(){
+  renderConsolidatedWeekSelector();
+  renderConsWeeklyTable();
+  renderConsMonthlyTable();
+  renderConsDcrTable();
+}
+
+// ----- Report 1: Weekly Commitment & Achievement -----
+function consWeeklyRows(){
+  const ym = getConsPeriod();
+  const w = consSelectedWeek;
+  return executives.map(ex => {
+    const month = getMonthReview(ex.id, ym);
+    const wk = month.weeks[w];
+    return {
+      name: ex.name,
+      billingCommit: (wk.billing.commitment.ora||0)+(wk.billing.commitment.contracts||0)+(wk.billing.commitment.consumables||0),
+      billingAchieve: (wk.billing.achievement.ora||0)+(wk.billing.achievement.contracts||0)+(wk.billing.achievement.consumables||0),
+      machineCommit: (wk.machines.commitment.a4||0)+(wk.machines.commitment.a3||0)+(wk.machines.commitment.plotters||0),
+      machineAchieve: (wk.machines.achievement.a4||0)+(wk.machines.achievement.a3||0)+(wk.machines.achievement.plotters||0),
+      collCommit: wk.collection.commitment||0,
+      collAchieve: wk.collection.achievement||0,
+    };
+  });
+}
+function renderConsWeeklyTable(){
+  const wrap = document.getElementById('consWeeklyTableWrap');
+  if (executives.length === 0){
+    wrap.innerHTML = `<p class="subline" style="padding:20px;">No sales executives yet.</p>`;
+    return;
+  }
+  const ym = getConsPeriod();
+  const w = consSelectedWeek;
+  const rows = consWeeklyRows();
+  const totals = rows.reduce((acc,r) => ({
+    billingCommit: acc.billingCommit+r.billingCommit, billingAchieve: acc.billingAchieve+r.billingAchieve,
+    machineCommit: acc.machineCommit+r.machineCommit, machineAchieve: acc.machineAchieve+r.machineAchieve,
+    collCommit: acc.collCommit+r.collCommit, collAchieve: acc.collAchieve+r.collAchieve,
+  }), { billingCommit:0, billingAchieve:0, machineCommit:0, machineAchieve:0, collCommit:0, collAchieve:0 });
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr><th rowspan="2">Sales Executive</th><th colspan="2">Billing</th><th colspan="2">Machine Sale</th><th colspan="2">Collection</th></tr>
+        <tr><th>Commitment</th><th>Achievement</th><th>Commitment</th><th>Achievement</th><th>Commitment</th><th>Achievement</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td><strong>${r.name}</strong></td>
+          <td class="mono">${formatCurrency(r.billingCommit)}</td>
+          <td class="mono">${formatCurrency(r.billingAchieve)}</td>
+          <td class="mono">${r.machineCommit}</td>
+          <td class="mono">${r.machineAchieve}</td>
+          <td class="mono">${formatCurrency(r.collCommit)}</td>
+          <td class="mono">${formatCurrency(r.collAchieve)}</td>
+        </tr>`).join('')}
+        <tr style="font-weight:700;background:var(--cloud);">
+          <td>Total</td>
+          <td class="mono">${formatCurrency(totals.billingCommit)}</td>
+          <td class="mono">${formatCurrency(totals.billingAchieve)}</td>
+          <td class="mono">${totals.machineCommit}</td>
+          <td class="mono">${totals.machineAchieve}</td>
+          <td class="mono">${formatCurrency(totals.collCommit)}</td>
+          <td class="mono">${formatCurrency(totals.collAchieve)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="subline" style="padding:12px 16px;">Showing ${w} of ${formatClosureMonth(ym)}.</p>
+  `;
+}
+
+// ----- Report 2: Current Month Target & Achievement -----
+function consMonthlyRows(){
+  const ym = getConsPeriod();
+  return executives.map(ex => {
+    const month = getMonthReview(ex.id, ym);
+    const t = month.targets;
+    let billingAchieve = 0, machineAchieve = 0, collCommit = 0, collAchieve = 0;
+    REVIEW_WEEKS.forEach(w => {
+      const wk = month.weeks[w];
+      billingAchieve += (wk.billing.achievement.ora||0)+(wk.billing.achievement.contracts||0)+(wk.billing.achievement.consumables||0);
+      machineAchieve += (wk.machines.achievement.a4||0)+(wk.machines.achievement.a3||0)+(wk.machines.achievement.plotters||0);
+      collCommit += wk.collection.commitment||0;
+      collAchieve += wk.collection.achievement||0;
+    });
+    return {
+      name: ex.name,
+      billingTarget: (t.billing.ora||0)+(t.billing.contracts||0)+(t.billing.consumables||0),
+      billingAchieve,
+      machineTarget: (t.machines.a4||0)+(t.machines.a3||0)+(t.machines.plotters||0),
+      machineAchieve,
+      collCommit, collAchieve,
+    };
+  });
+}
+function renderConsMonthlyTable(){
+  const wrap = document.getElementById('consMonthlyTableWrap');
+  if (executives.length === 0){
+    wrap.innerHTML = `<p class="subline" style="padding:20px;">No sales executives yet.</p>`;
+    return;
+  }
+  const ym = getConsPeriod();
+  const rows = consMonthlyRows();
+  const totals = rows.reduce((acc,r) => ({
+    billingTarget: acc.billingTarget+r.billingTarget, billingAchieve: acc.billingAchieve+r.billingAchieve,
+    machineTarget: acc.machineTarget+r.machineTarget, machineAchieve: acc.machineAchieve+r.machineAchieve,
+    collCommit: acc.collCommit+r.collCommit, collAchieve: acc.collAchieve+r.collAchieve,
+  }), { billingTarget:0, billingAchieve:0, machineTarget:0, machineAchieve:0, collCommit:0, collAchieve:0 });
+  const pct = (a,b) => b>0 ? Math.round((a/b)*100) : 0;
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr><th rowspan="2">Sales Executive</th><th colspan="3">Billing</th><th colspan="3">Machine Sale</th><th colspan="2">Collection</th></tr>
+        <tr><th>Target</th><th>Achievement</th><th>%</th><th>Target</th><th>Achievement</th><th>%</th><th>Committed</th><th>Achieved</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td><strong>${r.name}</strong></td>
+          <td class="mono">${formatCurrency(r.billingTarget)}</td>
+          <td class="mono">${formatCurrency(r.billingAchieve)}</td>
+          <td class="mono">${pct(r.billingAchieve,r.billingTarget)}%</td>
+          <td class="mono">${r.machineTarget}</td>
+          <td class="mono">${r.machineAchieve}</td>
+          <td class="mono">${pct(r.machineAchieve,r.machineTarget)}%</td>
+          <td class="mono">${formatCurrency(r.collCommit)}</td>
+          <td class="mono">${formatCurrency(r.collAchieve)}</td>
+        </tr>`).join('')}
+        <tr style="font-weight:700;background:var(--cloud);">
+          <td>Total</td>
+          <td class="mono">${formatCurrency(totals.billingTarget)}</td>
+          <td class="mono">${formatCurrency(totals.billingAchieve)}</td>
+          <td class="mono">${pct(totals.billingAchieve,totals.billingTarget)}%</td>
+          <td class="mono">${totals.machineTarget}</td>
+          <td class="mono">${totals.machineAchieve}</td>
+          <td class="mono">${pct(totals.machineAchieve,totals.machineTarget)}%</td>
+          <td class="mono">${formatCurrency(totals.collCommit)}</td>
+          <td class="mono">${formatCurrency(totals.collAchieve)}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="subline" style="padding:12px 16px;">Showing ${formatClosureMonth(ym)}. Collection has no separate monthly target field in the system, so Committed / Achieved shown here are the sum of all 5 weeks.</p>
+  `;
+}
+
+// ----- Report 3: Weekly DCR Report (Telesale-aware) -----
+// Telesale entries are daily summary rows (call_type === 'Telesale') carrying
+// cold_email_sent / cold_phone_call / followup_call / followup_email counts
+// instead of a single customer visit, matching how the DCR tab itself
+// already treats them (see renderDcrMiniDashboard / toggleDcrCallTypeFields).
+function consDcrRows(){
+  const ym = getConsPeriod();
+  const w = consSelectedWeek;
+  const weekEntries = dcrEntries.filter(d => dateInConsWeek(d.date, ym, w));
+  return executives.map(ex => {
+    const own = weekEntries.filter(d => d.sales_executive_id === ex.id);
+    const byType = {};
+    DCR_CALL_TYPES.forEach(t => byType[t] = 0);
+    let coldEmail = 0, coldCall = 0, followupCall = 0, followupEmail = 0;
+    own.forEach(d => {
+      if (d.call_type === 'Telesale'){
+        coldEmail += Number(d.cold_email_sent||0);
+        coldCall += Number(d.cold_phone_call||0);
+        followupCall += Number(d.followup_call||0);
+        followupEmail += Number(d.followup_email||0);
+      } else if (byType[d.call_type] !== undefined){
+        byType[d.call_type]++;
+      }
+    });
+    const telesaleTotal = coldEmail + coldCall + followupCall + followupEmail;
+    const nonTelesaleTotal = Object.values(byType).reduce((s,n)=>s+n,0);
+    return { name: ex.name, byType, coldEmail, coldCall, followupCall, followupEmail, telesaleTotal, total: nonTelesaleTotal + telesaleTotal };
+  });
+}
+function renderConsDcrTable(){
+  const wrap = document.getElementById('consDcrTableWrap');
+  if (executives.length === 0){
+    wrap.innerHTML = `<p class="subline" style="padding:20px;">No sales executives yet.</p>`;
+    return;
+  }
+  const ym = getConsPeriod();
+  const w = consSelectedWeek;
+  const rows = consDcrRows();
+  const totals = { total:0, coldEmail:0, coldCall:0, followupCall:0, followupEmail:0, byType:{} };
+  DCR_CALL_TYPES.forEach(t => totals.byType[t] = 0);
+  rows.forEach(r => {
+    totals.total += r.total;
+    totals.coldEmail += r.coldEmail; totals.coldCall += r.coldCall;
+    totals.followupCall += r.followupCall; totals.followupEmail += r.followupEmail;
+    DCR_CALL_TYPES.forEach(t => totals.byType[t] += r.byType[t]);
+  });
+  const dayLabel = w==='Week 5' ? '29–31' : (w==='Week 1'?'1–7':w==='Week 2'?'8–14':w==='Week 3'?'15–21':'22–28');
+
+  wrap.innerHTML = `
+    <table>
+      <thead>
+        <tr><th rowspan="2">Sales Executive</th><th colspan="${DCR_CALL_TYPES.length}">Field Calls</th><th colspan="4">Telesale</th><th rowspan="2">Total Activities</th></tr>
+        <tr>${DCR_CALL_TYPES.map(t=>`<th>${t}</th>`).join('')}<th>Cold Email Sent</th><th>Cold Phone Call</th><th>Follow up Call</th><th>Follow up Email</th></tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => `<tr>
+          <td><strong>${r.name}</strong></td>
+          ${DCR_CALL_TYPES.map(t=>`<td class="mono">${r.byType[t]}</td>`).join('')}
+          <td class="mono">${r.coldEmail}</td>
+          <td class="mono">${r.coldCall}</td>
+          <td class="mono">${r.followupCall}</td>
+          <td class="mono">${r.followupEmail}</td>
+          <td class="mono"><strong>${r.total}</strong></td>
+        </tr>`).join('')}
+        <tr style="font-weight:700;background:var(--cloud);">
+          <td>Total</td>
+          ${DCR_CALL_TYPES.map(t=>`<td class="mono">${totals.byType[t]}</td>`).join('')}
+          <td class="mono">${totals.coldEmail}</td>
+          <td class="mono">${totals.coldCall}</td>
+          <td class="mono">${totals.followupCall}</td>
+          <td class="mono">${totals.followupEmail}</td>
+          <td class="mono">${totals.total}</td>
+        </tr>
+      </tbody>
+    </table>
+    <p class="subline" style="padding:12px 16px;">Showing ${w} (days ${dayLabel}) of ${formatClosureMonth(ym)}. Telesale columns are counts of Cold Email Sent / Cold Phone Call / Follow up Call / Follow up Email logged that week, same as the Telesale summary entries in the DCR tab.</p>
+  `;
+}
+
+// ----- Export all three consolidated reports to one workbook -----
+function exportConsolidatedExcel(){
+  const ym = getConsPeriod();
+  const w = consSelectedWeek;
+
+  const weeklyRows = consWeeklyRows().map(r => ({
+    'Sales Executive': r.name,
+    'Billing Commitment': r.billingCommit, 'Billing Achievement': r.billingAchieve,
+    'Machine Commitment': r.machineCommit, 'Machine Achievement': r.machineAchieve,
+    'Collection Commitment': r.collCommit, 'Collection Achievement': r.collAchieve,
+  }));
+  const monthlyRows = consMonthlyRows().map(r => ({
+    'Sales Executive': r.name,
+    'Billing Target': r.billingTarget, 'Billing Achievement': r.billingAchieve,
+    'Machine Target': r.machineTarget, 'Machine Achievement': r.machineAchieve,
+    'Collection Committed': r.collCommit, 'Collection Achieved': r.collAchieve,
+  }));
+  const dcrRows = consDcrRows().map(r => {
+    const row = { 'Sales Executive': r.name };
+    DCR_CALL_TYPES.forEach(t => row[t] = r.byType[t]);
+    row['Telesale Cold Email Sent'] = r.coldEmail;
+    row['Telesale Cold Phone Call'] = r.coldCall;
+    row['Telesale Follow up Call'] = r.followupCall;
+    row['Telesale Follow up Email'] = r.followupEmail;
+    row['Total Activities'] = r.total;
+    return row;
+  });
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(weeklyRows), `Weekly ${w}`.slice(0,31));
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(monthlyRows), 'Monthly Target-Achv');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dcrRows), `DCR ${w}`.slice(0,31));
+  XLSX.writeFile(wb, `consolidated-dashboard-${ym}.xlsx`);
+}
+
 // ---------- Modal helper ----------
 function closeModal(id){ document.getElementById(id).classList.add('hidden'); }
 
@@ -3154,28 +4759,6 @@ function exportExcel(){
   XLSX.writeFile(wb, 'visit-requests.xlsx');
 }
 
-// ---------- Sales Executive mood emoji ----------
-// A little emoji next to the Sales Executive's name that cycles through
-// different moods every few seconds with a quick flip animation. Only
-// shown for the sales_executive role (see enterApp()).
-(function initMoodEmoji(){
-  const MOOD_EMOJIS = ['🙂','😄','😎','🤩','🥳','😴','🤔','😅','😌'];
-  let moodIndex = 0;
-  const el = document.getElementById('moodEmoji');
-  if (!el) return;
-
-  function cycleMood(){
-    if (el.classList.contains('hidden')) return; // only animate for Sales Executives
-    el.classList.remove('mood-zoom');
-    void el.offsetWidth; // restart animation even if triggered again quickly
-    el.classList.add('mood-zoom');
-    setTimeout(() => {
-      moodIndex = (moodIndex + 1) % MOOD_EMOJIS.length;
-      el.textContent = MOOD_EMOJIS[moodIndex];
-    }, 400); // swap right at the zoomed-in peak of the animation
-  }
-  setInterval(cycleMood, 10000);
-})();
 </script>
 </body>
 </html>

@@ -4144,6 +4144,11 @@ function canManageLeads(user){
   return !!(fresh && fresh.can_distribute_leads);
 }
 function canDeleteLead(){ return isFullRights(currentUser.role); }
+// Full visibility of the lead pool is for Manager/Assistant Manager ONLY.
+// A Sales Executive with distribution rights can create/assign leads but
+// only sees leads assigned to themselves — never unassigned or other
+// executives' leads.
+function canViewAllLeads(user){ return isFullRights(user.role); }
 
 function leadStatusChip(status){
   if (!status) return `<span class="chip chip-pending">Not started</span>`;
@@ -4178,9 +4183,12 @@ function goToLeadsPage(p){ leadsPage = p; renderLeadsTable(); }
 
 function getVisibleLeads(){
   const manage = canManageLeads(currentUser);
-  let data = manage ? leads : leads.filter(l => l.assigned_to === currentUser.id);
+  const viewAll = canViewAllLeads(currentUser);
+  let data = viewAll
+    ? leads
+    : leads.filter(l => l.assigned_to === currentUser.id);
 
-  if (manage){
+  if (viewAll){
     const assignedFilter = document.getElementById('fltLeadsAssigned').value;
     if (assignedFilter === 'unassigned') data = data.filter(l => !l.assigned_to);
     else if (assignedFilter !== 'all') data = data.filter(l => l.assigned_to === assignedFilter);
@@ -4203,13 +4211,14 @@ function getVisibleLeads(){
 
 function renderLeadsTable(){
   const manage = canManageLeads(currentUser);
-  document.getElementById('leadsAssignedFilterField').classList.toggle('hidden', !manage);
+  const viewAll = canViewAllLeads(currentUser);
+  document.getElementById('leadsAssignedFilterField').classList.toggle('hidden', !viewAll);
   document.getElementById('addLeadBtn').classList.toggle('hidden', !manage);
-  if (manage) populateLeadsAssignedFilter();
+  if (viewAll) populateLeadsAssignedFilter();
 
   document.getElementById('leadsTableHead').innerHTML = `
     <th>Date</th><th>Customer</th><th>Contact</th><th>Mobile</th>
-    <th>Status</th><th>Status Updated</th><th>Remarks</th>${manage ? '<th>Assigned To</th>' : ''}<th>Actions</th>
+    <th>Status</th><th>Status Updated</th><th>Remarks</th>${viewAll ? '<th>Assigned To</th>' : ''}<th>Actions</th>
   `;
 
   const filteredRows = getVisibleLeads();
@@ -4227,7 +4236,7 @@ function renderLeadsTable(){
     displayRows = filteredRows.slice(start, start + PAGE_ROW_COUNT);
   }
 
-  const colCount = manage ? 9 : 8;
+  const colCount = viewAll ? 9 : 8;
   if (totalCount === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="${colCount}">No leads match these filters.</td></tr>`;
     renderPaginationBar('leadsPaginationBar', 0, leadsViewMode, leadsPage, totalPages, 'showAllLeads', 'showRecentLeads', 'goToLeadsPage');
@@ -4251,7 +4260,7 @@ function renderLeadsTable(){
       <td>${leadStatusChip(l.status)}</td>
       <td class="mono">${l.status_date || '—'}</td>
       <td>${l.remarks ? escapeHtml(l.remarks) : '—'}</td>
-      ${manage ? `<td>${l.assigned_to ? escapeHtml(execName(l.assigned_to)) : '—'}</td>` : ''}
+      ${viewAll ? `<td>${l.assigned_to ? escapeHtml(execName(l.assigned_to)) : '—'}</td>` : ''}
       <td><div class="row-actions">${actions}</div></td>
     </tr>`;
   }).join('');
@@ -4264,6 +4273,7 @@ function openLeadModal(uid){
   if (!uid && !manage) return; // a plain Sales Executive can't create leads
 
   const entry = uid ? leads.find(x => x.uid === uid) : null;
+  if (entry && !canViewAllLeads(currentUser) && entry.assigned_to !== currentUser.id) return;
 
   document.getElementById('leadForm').reset();
   document.getElementById('leadUid').value = entry ? entry.uid : '';
@@ -4299,6 +4309,7 @@ async function submitLeadForm(e){
   const todayStr = new Date().toISOString().slice(0,10);
 
   let entry = uid ? leads.find(x => x.uid === uid) : null;
+  if (entry && !canViewAllLeads(currentUser) && entry.assigned_to !== currentUser.id) return;
 
   if (entry){
     // Only someone who can manage leads may change customer/assignment

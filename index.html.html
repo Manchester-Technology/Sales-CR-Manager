@@ -677,7 +677,7 @@
         </div>
         <div class="field">
           <label>Search</label>
-          <input id="fltLeadsSearch" type="text" placeholder="Customer, contact, or mobile" oninput="debouncedLeadsFilterChanged()">
+          <input id="fltLeadsSearch" type="text" placeholder="Customer, contact, mobile, email, requirement" oninput="debouncedLeadsFilterChanged()">
         </div>
         <div class="filter-actions">
           <button class="btn btn-secondary" onclick="resetLeadsFilters()">Reset</button>
@@ -1067,6 +1067,8 @@
         <div class="field"><label>Customer Name</label><input id="leadCustomerName" type="text"></div>
         <div class="field"><label>Contact Name</label><input id="leadContactName" type="text"></div>
         <div class="field"><label>Mobile Number</label><input id="leadMobile" type="tel"></div>
+        <div class="field"><label>Email</label><input id="leadEmail" type="email" placeholder="name@company.com"></div>
+        <div class="field full"><label>Customer Requirement</label><textarea id="leadRequirement" placeholder="What the customer needs (e.g. model, quantity, lease/purchase, budget)"></textarea></div>
         <div class="field">
           <label>Assign to Sales Executive</label>
           <select id="leadAssignedTo"><option value="">Unassigned</option></select>
@@ -4213,7 +4215,7 @@ function openLeadHistory(uid){
   const l = leads.find(x => x.uid === uid);
   if (!l || !canSeeLead(currentUser, l)) return;
   document.getElementById('leadHistoryTitle').textContent = 'Lead History';
-  document.getElementById('leadHistorySub').textContent = (l.customer_name || 'Lead') + (l.mobile_number ? ' · ' + l.mobile_number : '');
+  document.getElementById('leadHistorySub').textContent = (l.customer_name || 'Lead') + (l.mobile_number ? ' · ' + l.mobile_number : '') + (l.email ? ' · ' + l.email : '');
   let hist = (l.status_history || []).slice();
   if (!hist.length && l.status) hist = [{ status:l.status, date:l.status_date, remark:l.remarks }]; // legacy lead
   const row = (a,b,c) => `<div style="border-left:3px solid var(--amber);padding:6px 10px;margin:0 0 10px;background:var(--cloud);border-radius:0 8px 8px 0;"><div class="mono" style="font-size:11.5px;color:var(--slate);">${a}</div><div style="font-weight:600;">${b}</div>${c ? `<div style="color:var(--slate);margin-top:2px;">${c}</div>` : ''}</div>`;
@@ -4289,7 +4291,9 @@ function getVisibleLeads(){
     data = data.filter(l =>
       (l.customer_name||'').toLowerCase().includes(search) ||
       (l.contact_name||'').toLowerCase().includes(search) ||
-      (l.mobile_number||'').toLowerCase().includes(search)
+      (l.mobile_number||'').toLowerCase().includes(search) ||
+      (l.email||'').toLowerCase().includes(search) ||
+      (l.requirement||'').toLowerCase().includes(search)
     );
   }
 
@@ -4306,7 +4310,7 @@ function renderLeadsTable(){
   const showAssigned = viewAll || manage;
 
   document.getElementById('leadsTableHead').innerHTML = `
-    <th>Date</th><th>Customer</th><th>Contact</th><th>Mobile</th>
+    <th>Date</th><th>Customer</th><th>Contact</th><th>Mobile</th><th>Email</th><th>Requirement</th>
     <th>Status</th><th>Status Updated</th><th>Remarks</th><th>Created By</th><th>Shared By</th>${showAssigned ? '<th>Assigned To</th>' : ''}<th>Actions</th>
   `;
 
@@ -4325,7 +4329,7 @@ function renderLeadsTable(){
     displayRows = filteredRows.slice(start, start + PAGE_ROW_COUNT);
   }
 
-  const colCount = showAssigned ? 11 : 10;
+  const colCount = showAssigned ? 13 : 12;
   if (totalCount === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="${colCount}">No leads match these filters.</td></tr>`;
     renderPaginationBar('leadsPaginationBar', 0, leadsViewMode, leadsPage, totalPages, 'showAllLeads', 'showRecentLeads', 'goToLeadsPage');
@@ -4347,6 +4351,8 @@ function renderLeadsTable(){
       <td>${l.customer_name ? escapeHtml(l.customer_name) : '—'}</td>
       <td>${l.contact_name ? escapeHtml(l.contact_name) : '—'}</td>
       <td class="mono">${l.mobile_number ? escapeHtml(l.mobile_number) : '—'}</td>
+      <td>${l.email ? `<a href="mailto:${escapeHtml(l.email)}">${escapeHtml(l.email)}</a>` : '—'}</td>
+      <td style="min-width:180px;white-space:pre-wrap;">${l.requirement ? escapeHtml(l.requirement) : '—'}</td>
       <td>${leadStatusChip(l.status)}</td>
       <td class="mono">${l.status_date || '—'}</td>
       <td>${l.remarks ? escapeHtml(l.remarks) : '—'}</td>
@@ -4383,6 +4389,8 @@ function openLeadModal(uid){
     document.getElementById('leadCustomerName').value = entry.customer_name || '';
     document.getElementById('leadContactName').value = entry.contact_name || '';
     document.getElementById('leadMobile').value = entry.mobile_number || '';
+    document.getElementById('leadEmail').value = entry.email || '';
+    document.getElementById('leadRequirement').value = entry.requirement || '';
     document.getElementById('leadAssignedTo').value = entry.assigned_to || '';
     document.getElementById('leadStatus').value = entry.status || '';
     document.getElementById('leadRemarks').value = entry.remarks || '';
@@ -4421,6 +4429,8 @@ async function submitLeadForm(e){
       entry.customer_name = document.getElementById('leadCustomerName').value.trim();
       entry.contact_name = document.getElementById('leadContactName').value.trim();
       entry.mobile_number = document.getElementById('leadMobile').value.trim();
+      entry.email = document.getElementById('leadEmail').value.trim();
+      entry.requirement = document.getElementById('leadRequirement').value.trim();
       const newAssignee = document.getElementById('leadAssignedTo').value || null;
       if (newAssignee !== (entry.assigned_to || null)){
         entry.assigned_to = newAssignee;
@@ -4448,6 +4458,8 @@ async function submitLeadForm(e){
       customer_name: document.getElementById('leadCustomerName').value.trim(),
       contact_name: document.getElementById('leadContactName').value.trim(),
       mobile_number: document.getElementById('leadMobile').value.trim(),
+      email: document.getElementById('leadEmail').value.trim(),
+      requirement: document.getElementById('leadRequirement').value.trim(),
       assigned_to: assignee,
       created_by: me.id,
       created_by_name: me.name,
@@ -4482,6 +4494,8 @@ function exportLeadsExcel(){
     'Customer Name': l.customer_name || '',
     'Contact Name': l.contact_name || '',
     'Mobile Number': l.mobile_number || '',
+    'Email': l.email || '',
+    'Requirement': l.requirement || '',
     'Status': l.status || 'Not started',
     'Status Updated': l.status_date || '',
     'Remarks': l.remarks || '',

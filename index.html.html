@@ -415,7 +415,7 @@
           </div>
         </div>
         <table>
-          <thead><tr><th>Name</th><th>Open Requests</th><th>Total Requests</th><th>Lead Distribution</th><th>Actions</th></tr></thead>
+          <thead><tr><th>Name</th><th>Open Requests</th><th>Total Requests</th><th>Telesales Executive</th><th>Actions</th></tr></thead>
           <tbody id="execsBody"></tbody>
         </table>
       </div>
@@ -658,6 +658,10 @@
          them and can update status + remark, never delete. -->
     <section id="panelLeads" class="hidden">
       <div class="card filter-bar">
+        <div class="field hidden" id="leadsCreatedFilterField">
+          <label>Created By</label>
+          <select id="fltLeadsCreated" onchange="leadsFilterChanged()"></select>
+        </div>
         <div class="field hidden" id="leadsAssignedFilterField">
           <label>Assigned To</label>
           <select id="fltLeadsAssigned" onchange="leadsFilterChanged()"></select>
@@ -824,7 +828,7 @@
       </div>
       <div class="field" style="display:flex;align-items:center;gap:8px;flex-direction:row;">
         <input type="checkbox" id="execCanDistributeLeads" style="width:auto;margin:0;">
-        <label style="margin:0;" for="execCanDistributeLeads">Can distribute leads (assign leads to other Sales Executives, in addition to Manager/Assistant Manager)</label>
+        <label style="margin:0;" for="execCanDistributeLeads">Telesales Executive (can create leads and distribute them to other Sales Executives; always sees the leads they created)</label>
       </div>
       <p id="execFormError" class="hidden" style="color:var(--danger);font-size:12.5px;margin:-6px 0 12px;">Fill in name, email, and a password.</p>
       <div class="modal-actions">
@@ -1084,6 +1088,18 @@
         <button type="submit" class="btn btn-primary">Save</button>
       </div>
     </form>
+  </div>
+</div>
+
+<!-- ============ Lead History Modal ============ -->
+<div id="leadHistoryModal" class="modal-overlay hidden">
+  <div class="modal">
+    <h3 id="leadHistoryTitle">Lead History</h3>
+    <p class="sub" id="leadHistorySub"></p>
+    <div id="leadHistoryBody" style="max-height:60vh;overflow:auto;font-size:13px;"></div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" onclick="closeModal('leadHistoryModal')">Close</button>
+    </div>
   </div>
 </div>
 
@@ -2383,10 +2399,10 @@ function renderExecs(){
     const own = requests.filter(r => r.sales_executive_id === ex.id);
     const open = own.filter(r => r.approval_status === 'Pending AM Approval' || r.approval_status === 'Pending Manager Approval').length;
     return `<tr>
-      <td>${escapeHtml(ex.name)}</td>
+      <td>${escapeHtml(ex.name)}${ex.can_distribute_leads ? ' <span class="chip chip-stage2" style="margin-left:6px;">Telesales</span>' : ''}</td>
       <td>${open}</td>
       <td>${own.length}</td>
-      <td>${ex.can_distribute_leads ? '<span class="chip chip-accepted">Enabled</span>' : '<span class="chip chip-pending">Off</span>'}</td>
+      <td>${ex.can_distribute_leads ? '<span class="chip chip-accepted">Telesales</span>' : '<span class="chip chip-pending">Off</span>'}</td>
       <td><div class="row-actions">
         <button class="icon-btn" onclick="openExecModal('${ex.id}')">Edit</button>
         <button class="icon-btn decline" onclick="deleteExecutive('${ex.id}')">Delete</button>
@@ -4149,6 +4165,75 @@ function canDeleteLead(){ return isFullRights(currentUser.role); }
 // only sees leads assigned to themselves — never unassigned or other
 // executives' leads.
 function canViewAllLeads(user){ return isFullRights(user.role); }
+// A lead is visible to: Manager/AM (all), the Sales Executive it is assigned to,
+// and the Telesales Executive who created it (even after assigning it away).
+function canSeeLead(user, l){
+  if (isFullRights(user.role)) return true;
+  return l.assigned_to === user.id || l.created_by === user.id;
+}
+// Customer/assignment details can be edited by Manager/AM, or by a Telesales
+// Executive on leads THEY created. Everyone else assigned only updates status.
+function canEditLeadDetails(user, l){
+  if (isFullRights(user.role)) return true;
+  if (!canManageLeads(user)) return false;
+  return !l || l.created_by === user.id;
+}
+function userNameById(id){
+  if (!id) return '—';
+  const e = executives.find(x => x.id === id);
+  if (e) return e.name;
+  if (manager && manager.id === id) return manager.name || 'Manager';
+  if (assistantManager && assistantManager.id === id) return assistantManager.name || 'Assistant Manager';
+  if (currentUser && currentUser.id === id) return currentUser.name || roleLabel(currentUser.role);
+  return id;
+}
+function nowIso(){ return new Date().toISOString(); }
+function fmtStamp(iso){
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  return d.toLocaleString('en-GB', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+function leadSharedBy(l){
+  if (!l.assigned_by || l.assigned_by === l.assigned_to) return '—';
+  return escapeHtml(l.assigned_by_name || userNameById(l.assigned_by));
+}
+function leadCreatedBy(l){
+  if (!l.created_by) return '—';
+  return escapeHtml(l.created_by_name || userNameById(l.created_by));
+}
+function populateLeadsCreatedFilter(){
+  const sel = document.getElementById('fltLeadsCreated');
+  const prev = sel.value || 'all';
+  const ids = [...new Set(leads.map(l => l.created_by).filter(Boolean))];
+  sel.innerHTML = `<option value="all">All creators</option>` + ids.map(id => `<option value="${escapeHtml(id)}">${escapeHtml(userNameById(id))}</option>`).join('');
+  sel.value = (prev==='all' || ids.includes(prev)) ? prev : 'all';
+}
+function openLeadHistory(uid){
+  const l = leads.find(x => x.uid === uid);
+  if (!l || !canSeeLead(currentUser, l)) return;
+  document.getElementById('leadHistoryTitle').textContent = 'Lead History';
+  document.getElementById('leadHistorySub').textContent = (l.customer_name || 'Lead') + (l.mobile_number ? ' · ' + l.mobile_number : '');
+  let hist = (l.status_history || []).slice();
+  if (!hist.length && l.status) hist = [{ status:l.status, date:l.status_date, remark:l.remarks }]; // legacy lead
+  const row = (a,b,c) => `<div style="border-left:3px solid var(--amber);padding:6px 10px;margin:0 0 10px;background:var(--cloud);border-radius:0 8px 8px 0;"><div class="mono" style="font-size:11.5px;color:var(--slate);">${a}</div><div style="font-weight:600;">${b}</div>${c ? `<div style="color:var(--slate);margin-top:2px;">${c}</div>` : ''}</div>`;
+  let html = `<h4 style="margin:0 0 8px;font-size:13px;">Status updates</h4>`;
+  html += hist.length ? hist.slice().reverse().map(h => row(
+      escapeHtml(h.at ? fmtStamp(h.at) : (h.date || '—')) + (h.by_name || h.by ? ' · by ' + escapeHtml(h.by_name || userNameById(h.by)) : ''),
+      escapeHtml(h.status || 'Not started'),
+      h.remark ? escapeHtml(h.remark) : '')).join('')
+    : `<p style="color:var(--slate);">No status updates yet.</p>`;
+  html += `<h4 style="margin:16px 0 8px;font-size:13px;">Created &amp; shared</h4>`;
+  html += row(escapeHtml(l.created_at ? fmtStamp(l.created_at) : (l.date || '—')), 'Created by ' + leadCreatedBy(l), '');
+  const ah = l.assignment_history || [];
+  html += ah.length ? ah.slice().reverse().map(a => row(
+      escapeHtml(fmtStamp(a.at)),
+      (a.to ? 'Assigned to ' + escapeHtml(userNameById(a.to)) : 'Unassigned'),
+      'Shared by ' + escapeHtml(a.by_name || userNameById(a.by)))).join('')
+    : `<p style="color:var(--slate);">No assignment history recorded.</p>`;
+  document.getElementById('leadHistoryBody').innerHTML = html;
+  document.getElementById('leadHistoryModal').classList.remove('hidden');
+}
 
 function leadStatusChip(status){
   if (!status) return `<span class="chip chip-pending">Not started</span>`;
@@ -4186,12 +4271,14 @@ function getVisibleLeads(){
   const viewAll = canViewAllLeads(currentUser);
   let data = viewAll
     ? leads
-    : leads.filter(l => l.assigned_to === currentUser.id);
+    : leads.filter(l => canSeeLead(currentUser, l));
 
   if (viewAll){
     const assignedFilter = document.getElementById('fltLeadsAssigned').value;
     if (assignedFilter === 'unassigned') data = data.filter(l => !l.assigned_to);
     else if (assignedFilter !== 'all') data = data.filter(l => l.assigned_to === assignedFilter);
+    const createdFilter = document.getElementById('fltLeadsCreated').value;
+    if (createdFilter && createdFilter !== 'all') data = data.filter(l => l.created_by === createdFilter);
   }
   const statusFilter = document.getElementById('fltLeadsStatus').value;
   if (statusFilter === 'unassigned') data = data.filter(l => !l.status);
@@ -4214,11 +4301,13 @@ function renderLeadsTable(){
   const viewAll = canViewAllLeads(currentUser);
   document.getElementById('leadsAssignedFilterField').classList.toggle('hidden', !viewAll);
   document.getElementById('addLeadBtn').classList.toggle('hidden', !manage);
-  if (viewAll) populateLeadsAssignedFilter();
+  document.getElementById('leadsCreatedFilterField').classList.toggle('hidden', !viewAll);
+  if (viewAll){ populateLeadsAssignedFilter(); populateLeadsCreatedFilter(); }
+  const showAssigned = viewAll || manage;
 
   document.getElementById('leadsTableHead').innerHTML = `
     <th>Date</th><th>Customer</th><th>Contact</th><th>Mobile</th>
-    <th>Status</th><th>Status Updated</th><th>Remarks</th>${viewAll ? '<th>Assigned To</th>' : ''}<th>Actions</th>
+    <th>Status</th><th>Status Updated</th><th>Remarks</th><th>Created By</th><th>Shared By</th>${showAssigned ? '<th>Assigned To</th>' : ''}<th>Actions</th>
   `;
 
   const filteredRows = getVisibleLeads();
@@ -4236,7 +4325,7 @@ function renderLeadsTable(){
     displayRows = filteredRows.slice(start, start + PAGE_ROW_COUNT);
   }
 
-  const colCount = viewAll ? 9 : 8;
+  const colCount = showAssigned ? 11 : 10;
   if (totalCount === 0){
     tbody.innerHTML = `<tr class="empty-row"><td colspan="${colCount}">No leads match these filters.</td></tr>`;
     renderPaginationBar('leadsPaginationBar', 0, leadsViewMode, leadsPage, totalPages, 'showAllLeads', 'showRecentLeads', 'goToLeadsPage');
@@ -4245,9 +4334,10 @@ function renderLeadsTable(){
 
   tbody.innerHTML = displayRows.map(l => {
     const isOwner = currentUser.role === 'sales_executive' && l.assigned_to === currentUser.id;
-    let actions = '';
-    if (manage || isOwner){
-      actions += `<button class="icon-btn" onclick="openLeadModal('${l.uid}')">${manage ? 'Edit' : 'Update Status'}</button>`;
+    const canEditDetails = canEditLeadDetails(currentUser, l);
+    let actions = `<button class="icon-btn" onclick="openLeadHistory('${l.uid}')">History</button>`;
+    if (canEditDetails || isOwner){
+      actions += `<button class="icon-btn" onclick="openLeadModal('${l.uid}')">${canEditDetails ? 'Edit' : 'Update Status'}</button>`;
     }
     if (canDeleteLead()){
       actions += `<button class="icon-btn decline" onclick="deleteLead('${l.uid}')">Delete</button>`;
@@ -4260,7 +4350,9 @@ function renderLeadsTable(){
       <td>${leadStatusChip(l.status)}</td>
       <td class="mono">${l.status_date || '—'}</td>
       <td>${l.remarks ? escapeHtml(l.remarks) : '—'}</td>
-      ${viewAll ? `<td>${l.assigned_to ? escapeHtml(execName(l.assigned_to)) : '—'}</td>` : ''}
+      <td>${leadCreatedBy(l)}</td>
+      <td>${leadSharedBy(l)}</td>
+      ${showAssigned ? `<td>${l.assigned_to ? escapeHtml(userNameById(l.assigned_to)) : '—'}</td>` : ''}
       <td><div class="row-actions">${actions}</div></td>
     </tr>`;
   }).join('');
@@ -4273,16 +4365,18 @@ function openLeadModal(uid){
   if (!uid && !manage) return; // a plain Sales Executive can't create leads
 
   const entry = uid ? leads.find(x => x.uid === uid) : null;
-  if (entry && !canViewAllLeads(currentUser) && entry.assigned_to !== currentUser.id) return;
+  if (entry && !canSeeLead(currentUser, entry)) return;
+  const canEditDetails = entry ? canEditLeadDetails(currentUser, entry) : manage;
+  if (entry && !canEditDetails && entry.assigned_to !== currentUser.id) return;
 
   document.getElementById('leadForm').reset();
   document.getElementById('leadUid').value = entry ? entry.uid : '';
-  document.getElementById('leadManageFields').classList.toggle('hidden', !manage);
+  document.getElementById('leadManageFields').classList.toggle('hidden', !canEditDetails);
   populateLeadsAssignSelect();
 
   if (entry){
-    document.getElementById('leadModalTitle').textContent = manage ? 'Edit Lead' : 'Update Lead Status';
-    document.getElementById('leadModalSub').textContent = manage
+    document.getElementById('leadModalTitle').textContent = canEditDetails ? 'Edit Lead' : 'Update Lead Status';
+    document.getElementById('leadModalSub').textContent = canEditDetails
       ? 'No field is required — fill in whatever you have.'
       : `${entry.customer_name ? escapeHtml(entry.customer_name) : 'This lead'} — update the status and add a remark.`;
     document.getElementById('leadDate').value = entry.date || '';
@@ -4307,45 +4401,66 @@ async function submitLeadForm(e){
   const newStatus = document.getElementById('leadStatus').value;
   const newRemarks = document.getElementById('leadRemarks').value.trim();
   const todayStr = new Date().toISOString().slice(0,10);
+  const stamp = nowIso();
+  const me = { id: currentUser.id, name: currentUser.name || roleLabel(currentUser.role) };
 
   let entry = uid ? leads.find(x => x.uid === uid) : null;
-  if (entry && !canViewAllLeads(currentUser) && entry.assigned_to !== currentUser.id) return;
+  if (entry && !canSeeLead(currentUser, entry)) return;
+
+  const logAssign = (l, toId) => {
+    l.assigned_by = me.id; l.assigned_by_name = me.name; l.assigned_at = stamp;
+    l.assignment_history = l.assignment_history || [];
+    l.assignment_history.push({ to: toId || null, by: me.id, by_name: me.name, at: stamp });
+  };
 
   if (entry){
-    // Only someone who can manage leads may change customer/assignment
-    // details. A Sales Executive updating their own assigned lead only ever
-    // changes Status and Remarks — those fields stay hidden and untouched
-    // for them even though the inputs still technically hold the old values.
-    if (manage){
+    const canEditDetails = canEditLeadDetails(currentUser, entry);
+    if (!canEditDetails && entry.assigned_to !== currentUser.id) return;
+    if (canEditDetails){
       entry.date = document.getElementById('leadDate').value || null;
       entry.customer_name = document.getElementById('leadCustomerName').value.trim();
       entry.contact_name = document.getElementById('leadContactName').value.trim();
       entry.mobile_number = document.getElementById('leadMobile').value.trim();
-      entry.assigned_to = document.getElementById('leadAssignedTo').value || null;
+      const newAssignee = document.getElementById('leadAssignedTo').value || null;
+      if (newAssignee !== (entry.assigned_to || null)){
+        entry.assigned_to = newAssignee;
+        logAssign(entry, newAssignee);
+      }
     }
-    if (newStatus !== (entry.status || '')){
+    const statusChanged = newStatus !== (entry.status || '');
+    const remarkChanged = newRemarks !== (entry.remarks || '');
+    if (statusChanged || remarkChanged){
       entry.status_history = entry.status_history || [];
-      entry.status_history.push({ status: newStatus || 'Not started', date: todayStr });
+      // legacy lead: keep its original status/remark as the first timeline entry
+      if (!entry.status_history.length && entry.status){
+        entry.status_history.push({ status: entry.status, date: entry.status_date || null, remark: entry.remarks || '' });
+      }
+      entry.status_history.push({ status: newStatus || 'Not started', date: todayStr, at: stamp, by: me.id, by_name: me.name, remark: newRemarks });
       entry.status = newStatus || null;
       entry.status_date = todayStr;
     }
     entry.remarks = newRemarks;
   } else if (manage){
+    const assignee = document.getElementById('leadAssignedTo').value || null;
     entry = {
       uid: genUid('lead'),
       date: document.getElementById('leadDate').value || null,
       customer_name: document.getElementById('leadCustomerName').value.trim(),
       contact_name: document.getElementById('leadContactName').value.trim(),
       mobile_number: document.getElementById('leadMobile').value.trim(),
-      assigned_to: document.getElementById('leadAssignedTo').value || null,
+      assigned_to: assignee,
+      created_by: me.id,
+      created_by_name: me.name,
+      created_at: stamp,
       status: newStatus || null,
       status_date: newStatus ? todayStr : null,
-      status_history: newStatus ? [{ status: newStatus, date: todayStr }] : [],
+      status_history: (newStatus || newRemarks) ? [{ status: newStatus || 'Not started', date: todayStr, at: stamp, by: me.id, by_name: me.name, remark: newRemarks }] : [],
       remarks: newRemarks,
     };
+    if (assignee) logAssign(entry, assignee);
     leads.push(entry);
   } else {
-    return; // a plain Sales Executive can only reach here with an existing uid
+    return;
   }
 
   closeModal('leadModal');
@@ -4370,7 +4485,10 @@ function exportLeadsExcel(){
     'Status': l.status || 'Not started',
     'Status Updated': l.status_date || '',
     'Remarks': l.remarks || '',
-    'Assigned To': l.assigned_to ? execName(l.assigned_to) : 'Unassigned',
+    'Created By': l.created_by ? (l.created_by_name || userNameById(l.created_by)) : '',
+    'Shared By': (l.assigned_by && l.assigned_by !== l.assigned_to) ? (l.assigned_by_name || userNameById(l.assigned_by)) : '',
+    'Assigned To': l.assigned_to ? userNameById(l.assigned_to) : 'Unassigned',
+    'Status History': (l.status_history || []).map(h => `${h.at ? fmtStamp(h.at) : (h.date||'')} - ${h.status}${h.by_name ? ' (' + h.by_name + ')' : ''}${h.remark ? ': ' + h.remark : ''}`).join(' | '),
   }));
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
